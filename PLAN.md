@@ -1,9 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 and
-2 of 9 are built — the three engine hooks and the wire — and so is the hit-box
-half of step 0; the other half of step 0, looking at the blend, is still
-open.** This file is both the plan and the record — what was decided, what was
+**Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 to
+3 of 9 are built — the three engine hooks, the wire and the socket — and so is
+the hit-box half of step 0; the other half of step 0, looking at the blend, is
+still open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -104,7 +104,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — steps 1 and 2 of 9 are built, the three engine hooks and the wire, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — steps 1 to 3 of 9 are built, the three engine hooks, the wire and the socket, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -208,8 +208,11 @@ wisp-engine/
 ├── host_test.go          48 what the headless twin recorded, read back
 ├── input.go             133 key state, edge detection, the menu's lock
 ├── internal/
-│   └── wire/wire.go         1 the ten messages and their bytes
-│   └── wire/wire_test.go    1 round trips, the four refusals, the fuzz target
+│   ├── wire/wire.go       416 the ten messages and their bytes
+│   ├── wire/wire_test.go  197 round trips, the four refusals, the fuzz target
+│   ├── ws/frame_test.go    64 the RFC's key, and the fuzz target over the reader
+│   ├── ws/ws.go           511 RFC 6455: Accept, Dial, frames, close, ping
+│   └── ws/ws_test.go      521 every rule the brief lists, over net.Pipe
 ├── internal_test.go     693 draw order, layering, frame mapping, source rects
 ├── knobs.go             323 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
@@ -1391,6 +1394,46 @@ conformance notes.
   call `world.Tick()` themselves, so there is no clock to wait on and nothing
   to sleep for.
 
+**The socket is built, as `internal/ws`.** Five hundred lines including its
+doc comments, and four decisions that were not in the bullets above:
+
+- **`Close` sends the frame and closes the socket** without waiting for the
+  peer's close in return. The peer has the code, which is what a close frame
+  is for; a browser reports the close as clean because a close frame arrived
+  before the socket went, and the reader goroutine that would have waited for
+  the echo is the very thing shutdown is trying to end. When the *peer* closes,
+  `Read` echoes the code, closes the socket and returns a `*CloseError`
+  carrying it — the same type whichever side chose the code.
+- **`Accept` writes its own refusal** — 400 for a request that is not a
+  handshake or a key that is not sixteen bytes, 403 for an `Origin` that is
+  not this host or no `Origin` at all, 426 with `Sec-WebSocket-Version: 13`
+  for any other version — and returns why, so the handler has nothing left to
+  write in either case.
+- **`Dial` takes a `net.Conn`** rather than an address, so a test hands it one
+  end of a `net.Pipe` and a bot would hand it a dialled TCP connection. It
+  sends `Origin: http://host`, which is what a page served by that host would
+  send, and it refuses a masked server frame the way the server refuses an
+  unmasked client one.
+- **A hang-up is `io.ErrUnexpectedEOF`, not a close.** A peer that stops
+  mid-frame or goes away without a close frame owes no close frame back, so
+  the socket is closed and the read error comes up as it is; a read deadline
+  is `ReadTimeout` on the `Conn`, set before every frame, which is how the
+  server's "twice the ping interval" is carried out.
+
+`MaxMessage` is checked against the length in the header before the payload
+is read or allocated for, fragments counted together; it defaults to 1 MiB
+and the server sets 1 KiB. The `closed` flag is the one field the reader
+shares with the closers, so it is atomic and `-race` is quiet. The tests
+drive a real `http.Server` over a pipe listener — one `net.Pipe` per dial,
+handed to `Serve`, so the hijack is net/http's own — and cover the five
+handshake refusals, every payload size that changes the header's shape in
+both directions, the unmasked frame, fragments with a ping between them,
+three close handshakes, two length lies and a frame that delivers fewer bytes
+than it promised, ping and pong, nine control-frame rules, the masked server
+frame, and both deadlines. `FuzzRead` ran 15 seconds — 3.5 million
+executions — under the rule that a read ends in a message under the cap or
+one of the three errors a caller is written for, and found nothing.
+
 ### The lab's rules — `internal/lab`
 
 What both halves have to agree on, in one package with no `syscall/js` in it:
@@ -1508,7 +1551,7 @@ Each step is green on its own and is its own commit.
 2. **`internal/wire`**: the round-trip tests and the fuzz target — **done**.
 3. **`internal/ws`**: the handshake vector, masked and unmasked, fragmented,
    close, the length lie, ping and pong, the control-frame rules; a fuzz target
-   over the frame reader.
+   over the frame reader — **done**.
 4. **`internal/lab`**: the skills, the cap, the dash timer, the bounce, and
    their tests.
 5. **`cmd/serve`**: `config.go`, `slog`, the hub, `world.Tick`, `/ws`,
