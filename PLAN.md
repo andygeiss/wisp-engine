@@ -197,7 +197,7 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            144 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go          243 the playground (js && wasm)
+│   ├── lab/main.go           71 the playground (js && wasm)
 │   ├── serve/client.go      252 one socket: its reader, its writer, the hub
 │   ├── serve/config.go      103 the flags, each defaulting to its variable
 │   ├── serve/config_test.go  92 defaults, precedence, every refusal
@@ -220,7 +220,7 @@ wisp-engine/
 │   ├── lab/lab_test.go    247 the cooldown gate, the strike, the cap, the dash, the bounce
 │   ├── replica/replica.go 218 the server's world in an engine: slots, queue, the depth rule
 │   ├── replica/replica_test.go 289 apply, hold, fast-forward, catch-up, order, the blend's pair
-│   ├── wire/wire.go       421 the ten messages and their bytes
+│   ├── wire/wire.go       440 the ten messages and their bytes
 │   ├── wire/wire_test.go  197 round trips, the four refusals, the fuzz target
 │   ├── ws/frame_test.go    64 the RFC's key, and the fuzz target over the reader
 │   ├── ws/ws.go           511 RFC 6455: Accept, Dial, frames, close, ping
@@ -250,7 +250,7 @@ wisp-engine/
 ```
 
 3,792 lines of engine that build anywhere, 491 behind the browser tag and
-3,019 of tests; 1,183 of lab and server with 857 of tests; 1,532 under
+3,019 of tests; 1,542 of lab and server with 857 of tests; 1,551 under
 `internal/` with 1,318 of tests. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they

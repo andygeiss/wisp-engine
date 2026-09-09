@@ -60,12 +60,18 @@ var (
 	ErrValue = errors.New("wire: value out of range")
 )
 
-// Message is one of the ten message types. Only this package's types are
-// messages, because only they know their bytes.
+// Message is one of the ten message types.
+//
+// Encode with the concrete type's Append rather than through this interface
+// where the size of the binary matters: the moment a second concrete type
+// reaches an interface method call, TinyGo lowers the call to a dispatch over
+// every type that could arrive, and that cost the client eleven kilobytes
+// before it was measured.
 type Message interface {
 	// Kind is the message's first byte.
 	Kind() Kind
-	appendTo(b []byte) []byte
+	// Append encodes the message, kind byte first, onto the end of b.
+	Append(b []byte) []byte
 }
 
 // Hello is the client's first message: the protocol version it speaks.
@@ -165,10 +171,9 @@ const actorBytes = 2 + 4 + 4 + 8 + 1
 
 // Append encodes m onto the end of b and returns the longer slice. It
 // allocates only when b has no room, so a server encoding one snapshot a tick
-// reuses one buffer.
-func Append(b []byte, m Message) []byte {
-	return m.appendTo(append(b, byte(m.Kind())))
-}
+// reuses one buffer. It is the interface's Append; a TinyGo client calls the
+// concrete type's instead, for the reason [Message] gives.
+func Append(b []byte, m Message) []byte { return m.Append(b) }
 
 // Decode reads the one message b holds. It returns [ErrKind], [ErrShort],
 // [ErrLong] or [ErrValue] rather than a message that is not all there.
@@ -242,25 +247,32 @@ func (Event) Kind() Kind { return KindEvent }
 // Kind returns [KindPong].
 func (Pong) Kind() Kind { return KindPong }
 
-func (m Hello) appendTo(b []byte) []byte { return append(b, m.Version) }
+// Append encodes the message, kind byte first.
+func (m Hello) Append(b []byte) []byte { return append(b, byte(KindHello), m.Version) }
 
-func (m Intent) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint16(b, m.Seq)
+// Append encodes the message, kind byte first.
+func (m Intent) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint16(append(b, byte(KindIntent)), m.Seq)
 	return append(b, byte(m.DX), byte(m.DY), m.Skills)
 }
 
-func (m Ping) appendTo(b []byte) []byte { return binary.BigEndian.AppendUint32(b, m.T) }
+// Append encodes the message, kind byte first.
+func (m Ping) Append(b []byte) []byte {
+	return binary.BigEndian.AppendUint32(append(b, byte(KindPing)), m.T)
+}
 
-func (m Welcome) appendTo(b []byte) []byte {
-	b = append(b, m.Version, m.TickRate)
+// Append encodes the message, kind byte first.
+func (m Welcome) Append(b []byte) []byte {
+	b = append(b, byte(KindWelcome), m.Version, m.TickRate)
 	b = binary.BigEndian.AppendUint16(b, m.WorldW)
 	b = binary.BigEndian.AppendUint16(b, m.WorldH)
 	b = binary.BigEndian.AppendUint16(b, m.You)
 	return binary.BigEndian.AppendUint32(b, m.Tick)
 }
 
-func (m Spawn) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint16(b, m.Slot)
+// Append encodes the message, kind byte first.
+func (m Spawn) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint16(append(b, byte(KindSpawn)), m.Slot)
 	b = append(b, m.Image, m.Column, m.Row)
 	b = binary.BigEndian.AppendUint16(b, m.Width)
 	b = binary.BigEndian.AppendUint16(b, m.Height)
@@ -270,10 +282,14 @@ func (m Spawn) appendTo(b []byte) []byte {
 	return binary.BigEndian.AppendUint64(b, m.State)
 }
 
-func (m Despawn) appendTo(b []byte) []byte { return binary.BigEndian.AppendUint16(b, m.Slot) }
+// Append encodes the message, kind byte first.
+func (m Despawn) Append(b []byte) []byte {
+	return binary.BigEndian.AppendUint16(append(b, byte(KindDespawn)), m.Slot)
+}
 
-func (m Snapshot) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint32(b, m.Tick)
+// Append encodes the message, kind byte first.
+func (m Snapshot) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint32(append(b, byte(KindSnapshot)), m.Tick)
 	b = binary.BigEndian.AppendUint16(b, uint16(len(m.Actors)))
 	for _, a := range m.Actors {
 		b = binary.BigEndian.AppendUint16(b, a.Slot)
@@ -285,8 +301,9 @@ func (m Snapshot) appendTo(b []byte) []byte {
 	return b
 }
 
-func (m You) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint32(b, m.Tick)
+// Append encodes the message, kind byte first.
+func (m You) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint32(append(b, byte(KindYou)), m.Tick)
 	b = append(b, uint8(len(m.Cooldowns)))
 	for _, c := range m.Cooldowns {
 		b = binary.BigEndian.AppendUint16(b, c)
@@ -294,16 +311,18 @@ func (m You) appendTo(b []byte) []byte {
 	return b
 }
 
-func (m Event) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint32(b, m.Tick)
+// Append encodes the message, kind byte first.
+func (m Event) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint32(append(b, byte(KindEvent)), m.Tick)
 	b = binary.BigEndian.AppendUint16(b, m.Slot)
 	b = append(b, m.Skill)
 	b = appendF32(b, m.X)
 	return appendF32(b, m.Y)
 }
 
-func (m Pong) appendTo(b []byte) []byte {
-	b = binary.BigEndian.AppendUint32(b, m.T)
+// Append encodes the message, kind byte first.
+func (m Pong) Append(b []byte) []byte {
+	b = binary.BigEndian.AppendUint32(append(b, byte(KindPong)), m.T)
 	return binary.BigEndian.AppendUint32(b, m.Tick)
 }
 
