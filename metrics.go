@@ -11,6 +11,13 @@ import (
 // short enough to react while you are still holding the key.
 const metricsWindow = 120
 
+// lateFrame is how many budgets a frame has to take before it counts as late.
+// The budget is the middle of the window, so about half of a healthy scene's
+// frames sit just above it: comparing against the budget itself marks a steady
+// 60 fps as a problem, which is what the frame row and the sparkline used to
+// do. One and a half budgets is a frame the display actually missed.
+const lateFrame = 1.5
+
 // Stats is what the last two seconds cost. [Engine.Stats] returns it, and the
 // overlay draws it.
 //
@@ -46,6 +53,11 @@ type Stats struct {
 	// Load is the share of the frame budget the main thread spent working,
 	// 0 to 1 and beyond. It is the closest honest thing to processor load.
 	Load float64
+	// Late is the frame time, in milliseconds, at which a frame counts as
+	// missed: [Stats.Budget] times a tolerance. Compare a percentile against
+	// this rather than against Budget, which half of a healthy window exceeds
+	// by construction. 0 when the budget is not known yet.
+	Late float64
 	// LongFrames counts frames the browser itself reported as too long.
 	// Chromium only; -1 where the browser does not offer it.
 	LongFrames int
@@ -86,7 +98,7 @@ func (m *metrics) add(ms float64) {
 	m.frames[m.next] = ms
 	m.next = (m.next + 1) % metricsWindow
 	m.n = min(m.n+1, metricsWindow)
-	if b := m.budget(); b > 0 && ms > b*1.5 {
+	if b := m.budget(); b > 0 && ms > b*lateFrame {
 		m.dropped++
 	}
 }
@@ -119,6 +131,7 @@ func (e *Engine) Stats() Stats {
 	m := &e.metrics
 	s := Stats{
 		Budget:      m.budget(),
+		Late:        m.budget() * lateFrame,
 		DrawMs:      m.drawMs,
 		Drawn:       m.drawn,
 		Dropped:     m.dropped,
@@ -210,7 +223,7 @@ func (e *Engine) drawMetrics() {
 	switch {
 	case s.Budget > 0 && s.P99Ms > s.Budget*2:
 		frameColor = bad
-	case s.Budget > 0 && s.P99Ms > s.Budget:
+	case s.Late > 0 && s.P99Ms > s.Late:
 		frameColor = warn
 	}
 
@@ -258,7 +271,7 @@ func (e *Engine) drawSparkline(x, y, w, h, budget float64, good, warn, bad strin
 		switch {
 		case v > budget*2:
 			color = bad
-		case v > budget:
+		case v > budget*lateFrame:
 			color = warn
 		}
 		bh := min(v*scale, h)

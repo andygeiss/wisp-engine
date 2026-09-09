@@ -390,3 +390,48 @@ func TestMenuTextFits(t *testing.T) {
 		}
 	}
 }
+
+func TestSteadyFramesAreNotLate(t *testing.T) {
+	t.Parallel()
+	// The budget is the middle of the window, so about half a healthy scene's
+	// frames sit just above it. Comparing a high percentile against the budget
+	// therefore reports a steady 60 fps as a problem for ever — which stopped
+	// the lab's ramp on its first check, at zero sprites, every time.
+	var m metrics
+	jitter := []float64{16.66, 16.67, 16.68, 16.67}
+	for f := range metricsWindow {
+		m.add(jitter[f%len(jitter)])
+	}
+	s := Stats{Budget: m.budget(), Late: m.budget() * lateFrame}
+	s.P99Ms = m.percentile(0.99)
+
+	if s.P99Ms <= s.Budget {
+		t.Fatalf("p99 %v is not above the budget %v; this test proves nothing", s.P99Ms, s.Budget)
+	}
+	if s.P99Ms > s.Late {
+		t.Errorf("steady 60 fps counts as late: p99 %v over %v", s.P99Ms, s.Late)
+	}
+	if m.dropped != 0 {
+		t.Errorf("steady 60 fps dropped %d frames, want 0", m.dropped)
+	}
+}
+
+func TestLateFramesAreLate(t *testing.T) {
+	t.Parallel()
+	// The other half of the rule: a window that really is missing frames has
+	// to cross the threshold, or the ramp would never stop at all.
+	var m metrics
+	for range metricsWindow {
+		m.add(16.67)
+	}
+	for range metricsWindow / 4 {
+		m.add(40.0)
+	}
+	late := m.budget() * lateFrame
+	if p99 := m.percentile(0.99); p99 <= late {
+		t.Errorf("a window with 40 ms frames is not late: p99 %v against %v", p99, late)
+	}
+	if m.dropped == 0 {
+		t.Error("40 ms frames on a 16.7 ms budget dropped nothing")
+	}
+}

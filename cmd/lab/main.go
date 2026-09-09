@@ -51,8 +51,12 @@ const (
 	// is what makes the number it stops at mean something.
 	rampPerSecond = 100
 	// rampSettle is how long the ramp waits before it starts believing the
-	// frame times, so the first slow frames after a reset do not end it.
-	rampSettle = 1000.0
+	// frame times, so the first slow frames after a reset do not end it. It
+	// has to cover the engine's whole two-second statistics window: at half
+	// of it the window still held the reset, whose frames are the ones the
+	// 99th percentile reports, and the ramp ended before it had spawned
+	// anything.
+	rampSettle = 2000.0
 )
 
 // A spawned sprite carries its own velocity: the engine moves entities by
@@ -65,8 +69,10 @@ var (
 
 	// The automatic ramp: it adds sprites until the frame time breaks, then
 	// stops and holds the count. That number is what the lab exists to find.
-	rampAt      float64
-	rampCeiling int
+	rampAt float64
+	// rampCeiling is -1 until a ramp has finished, so that a ceiling of zero
+	// is a result the lab shows rather than one it hides.
+	rampCeiling = -1
 	ramping     bool
 	settled     float64
 )
@@ -94,7 +100,7 @@ func main() {
 func build(e *wisp.Engine) {
 	e.Reset()
 	vx, vy = vx[:0], vy[:0]
-	ramping, rampAt, rampCeiling, settled = false, 0, 0, 0
+	ramping, rampAt, rampCeiling, settled = false, 0, -1, 0
 
 	tiles := make([]int, tilesCols*tilesRows)
 	for i := range tiles {
@@ -210,7 +216,7 @@ func startRamp(e *wisp.Engine) {
 	}
 	despawn(e, e.Count()-first)
 	e.Debug.ShowMetrics = true
-	ramping, rampAt, rampCeiling, settled = true, 0, 0, 0
+	ramping, rampAt, rampCeiling, settled = true, 0, -1, 0
 }
 
 // ramp adds sprites until the near-worst frame in the window crosses the
@@ -226,10 +232,13 @@ func ramp(e *wisp.Engine, dt float64) {
 	}
 	s := e.Stats()
 	settled += dt
-	if settled < rampSettle || s.Budget <= 0 {
+	if settled < rampSettle || s.Late <= 0 {
 		return
 	}
-	if s.P99Ms > s.Budget {
+	// Against Late, not Budget: the budget is the middle of the window, so
+	// half a healthy scene's frames are above it and the ramp would stop on
+	// the first check every time.
+	if s.P99Ms > s.Late {
 		ramping = false
 		rampCeiling = e.Count() - first
 		return
@@ -255,7 +264,7 @@ func renderUI(e *wisp.Engine) {
 	switch {
 	case ramping:
 		status += "   ramping..."
-	case rampCeiling > 0:
+	case rampCeiling >= 0:
 		status += "   ceiling " + itoa(rampCeiling) + " at 60 fps"
 	}
 	e.Text(8, e.Height-24, status, "white", font, "left")
