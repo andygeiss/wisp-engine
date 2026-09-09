@@ -1,13 +1,13 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green, and 7 plays: two tabs on
-one machine play one world, which Andy confirmed in a browser on 2026-09-09.
-Every step of it is built — the three engine hooks, the wire, the socket, the
-lab's rules, the server, the replica, the client, the README, SPEC and
-Makefile, and the hit-box half of step 0. Three things are still open: the
-blend verdict, which is the other half of step 0; the numbers step 9 asks to
-write down; and the `v0.2.0` tag. The client half missed its size ceiling by
-a measured margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
+**Status: milestones 1 to 6 are built and green, and 7 is done: two tabs on
+one machine play one world, which Andy confirmed in a browser on 2026-09-09;
+the numbers step 9 asked for were measured the same day and are written down
+under that milestone's *Verification*; and `v0.2.0` is the annotated tag on
+the commit that writes them. Two things are still open, and both are a
+person's to close: the blend verdict, which is the other half of step 0, and
+the ruling on the client half, which missed its size ceiling by a measured
+margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided, and built.** The lab becomes the network client and the server
@@ -15,7 +15,7 @@ that serves it runs the world: the game state lives on the server, the browser
 sends only what the player is trying to do, cooldowns live on the server and
 the client copies them for its bars, and the camera is the client's. That is a
 thin client, and it dissolves three of the four questions the old brief left
-open. *Networking — milestone 7, playing* is the plan and the record of
+open. *Networking — milestone 7, done* is the plan and the record of
 building it, and `SPEC.md` carries the wider job as of the same change.
 
 **Three changes landed ahead of it**: an entity index is now a name the engine
@@ -111,7 +111,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **plays** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers and the tag of step 9 and the blend verdict of step 0 are what is left; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **done** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers of step 9 measured with a bot the same day and written into its *Verification*; tagged `v0.2.0`. The blend verdict of step 0 is what is left, and it is a browser's; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -194,8 +194,8 @@ where there is no fullscreen to ask for.
 | Renderer | Canvas2D now. The overlay produces the evidence for a WebGL2 batcher later. |
 | Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — not exposed by browsers`, never a made-up number. |
 | Sheet parsing | A hand-written scanner, not `encoding/json`. See *Aseprite sheets*. |
-| Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. |
-| Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, under way*. |
+| Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. `v0.2.0` is the second: it names the three hooks and the blend's API, and says what broke — the blend is on by default, so an entity moved from the per-frame update is drawn dragged back toward the tick until that movement moves into `Simulate`; bit 14 is `StateRemote` and no longer spare; and `Debug.ShowHitBoxes` draws now. |
+| Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, done*. |
 | Transport | WebSocket, hand-written on both sides, because the dependency rule refuses everything else a browser offers. TCP, so a 15-to-30 Hz game; 30 on the wire. |
 | Where the netcode lives | `internal/`, public the day a second consumer needs it. `cmd/serve` grows into the game server; there is no third `cmd/`. |
 | The lab's skills | `Q` strike, `E` spawn, `R` dash — the template's keys and cooldowns, so its migration maps one to one. |
@@ -1130,7 +1130,7 @@ holding a key no longer re-fires the instant its cooldown ends. Neither is
 hard to put back: the margin is `World.HitBoxMargin` in the tuning menu, and
 the keys are one `JustPressed` to `Down` each.
 
-## Networking — milestone 7, playing
+## Networking — milestone 7, done
 
 The decision this file said had to come first has been taken, and it is
 narrower than the brief it replaces. **The lab becomes the network client, and
@@ -1138,9 +1138,10 @@ the server that serves the lab also runs the world.** The game state lives on
 the server. The client sends what the player is trying to do — a direction, a
 skill — and gets the world back; the server owns every position and every
 cooldown, and the client owns the camera and everything else a player only
-looks at. All of it is built, and two tabs have played it. This section is
-the plan in the order it was built, with each decision recorded next to what
-it decided, each step marked as it landed, and what each one cost.
+looks at. All of it is built, two tabs have played it, and the wire has
+been measured. This section is the plan in the order it was built, with each
+decision recorded next to what it decided, each step marked as it landed, and
+what each one cost.
 
 ### The brief
 
@@ -1335,6 +1336,9 @@ A snapshot is the whole world every tick, on purpose. At 1000 bouncers that is
 about 19 KB a tick and 570 KB a second per client, which is fine on one
 machine and is the number the lab exists to print. Sending only what changed,
 and only what is near, are follow-ups that get written when a number says so.
+The number is in — 19,045 bytes a tick and 558 KB/s per client at 1,000
+bouncers, measured; *Verification* at the end of this milestone has the table
+— and it does not say so yet.
 
 Tests: every message round-trips; a truncated body is an error and not a
 panic; a fuzz target over the decoder, under the rule the sheet fuzzer has —
@@ -1756,10 +1760,12 @@ Each step is green on its own and is its own commit.
    wire; the Makefile's two comments that named the old server and the old
    size say the new ones.
 9. **Two browsers**, the list below; the numbers into this file; `make ci`;
-   tag `v0.2.0`, with the three hooks named in the tag message — **the two
-   browsers are done**: Andy played it in two tabs on 2026-09-09 and it
-   works, and `make ci` is green on the commit that records it. The numbers
-   below and the tag are still to come.
+   tag `v0.2.0`, with the three hooks named in the tag message — **done**:
+   Andy played it in two tabs on 2026-09-09 and it works; the numbers were
+   measured the same day and are below; `make ci` is green on the commit that
+   writes them down, and `v0.2.0` is the annotated tag on that commit, naming
+   `StateRemote`, `Engine.Move` and `Input.MoveAxis`, the blend's `DrawPos`,
+   `Place` and `Render.Interpolate`, and what broke.
 
 ### Verification
 
@@ -1776,12 +1782,50 @@ Each step is green on its own and is its own commit.
   for the socket and the console.
 - The cheat check: an intent with a dx of 100 moves at 1, and `Q` held down
   moves nothing until the server's cooldown is up.
-- **Numbers to write down — still to write down** — because a claim nothing
-  measures is a memory: the
-  module's bytes before and after; snapshot bytes a tick at 100 and at 1000
-  bouncers; the client's KB/s in; the RTT on localhost; holds and
-  fast-forwards a minute at rest; the server's CPU at 1000 bouncers with two
-  clients.
+- **Numbers to write down — written down on 2026-09-09** — because a claim
+  nothing measures is a memory. The module's bytes before and after the
+  client are in *Gates* and *The client is built*: 242,081 and 273,817. The
+  rest were taken with a bot rather than a browser, because a browser cannot
+  be asked for sixty round trips or told when to start counting. The bot is
+  `net.go`'s loop with nobody at the keys: a host build of the engine
+  stepped at 60 frames a second by a `time.Ticker`, the replica's `Tick` as
+  its `Simulate`, the floor built locally, an intent every 500 ms, a ping a
+  second, the server's tick rate written over the knob every frame, and the
+  bytes counted the way the HUD counts them — the payload of every message,
+  framing excluded. Two of them dialled `cmd/serve` over TCP on 127.0.0.1
+  and held a sixty-second window each, starting at the client's first
+  applied snapshot so the join batch is outside it. The server's CPU is
+  `ps -o time` before and after the window, divided by the wall clock. Apple
+  M4 Pro, Go 1.27.1, the server built the way `make build` builds it. The
+  bot was 400 lines under `cmd/bot`, and it was deleted once it had printed
+  these, because there is no third `cmd/`.
+
+  | | 100 bouncers, two clients | 1,000 bouncers, two clients | 1,000 bouncers, no client |
+  |---|---|---|---|
+  | snapshot on the wire | 102 actors, 1,945 B | 1,002 actors, 19,045 B | — |
+  | in, per client | 57.3 KB/s | 558.2 KB/s | — |
+  | round trip on localhost, 59 pings | median 0.2 ms, at most 0.7 | median 0.3 ms, at most 1.0 | — |
+  | held / fast-forwards / catch-ups, a minute at rest | 0 / 0 / 0 | 0 / 0 / 0 | — |
+  | server CPU, of one core | 1.1 % | 1.6 % | 0.8 % |
+  | server RSS | 18.3 MB | 19.1 MB | 18.8 MB |
+  | slow ticks | 0 | 0 | 0 |
+
+  Three things the table does not say on its own. **The snapshot is exactly
+  what *The wire* priced**: 7 bytes and 19 an actor, and 19,045 a tick at
+  1,000 bouncers is 558 KB/s at 30 ticks, within three per cent of the 570
+  that section estimated — a number the lab now prints rather than guesses.
+  **The buffer sits where it was designed to sit.** In sixty seconds each
+  client applied 1,800 snapshots in 1,800 engine ticks against 1,800 server
+  ticks — the two clocks agreed to the tick — and the queue after a frame
+  held nothing or one snapshot, never two: no tick found the queue empty
+  once the first snapshot was in, and none found three. That is a minute on
+  one machine with a quarter-millisecond round trip, so the depth rule has
+  been seen to hold and has not yet met a network. **The server is idle.**
+  The world alone at 1,000 bouncers is 0.8 per cent of a core; two clients
+  at 558 KB/s each add 0.8 more, so a client costs about 0.4 per cent at the
+  largest crowd the flag allows. The follow-ups *The wire* names — sending
+  only what changed, and only what is near — have their number, and it says
+  neither is needed for a crowd of a thousand on a machine like this one.
 
 ### Baseline gaps
 
