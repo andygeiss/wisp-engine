@@ -18,7 +18,7 @@ checklist's first box is checked at last. *Migrating `game-jam-template`* is
 the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
-`make wasm` produces a 228 KB module, every gate is green including the two
+`make wasm` produces a 232 KB module, every gate is green including the two
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
 
@@ -69,10 +69,12 @@ open and press keys in.
   309 KB was the number to protect in `game-jam-template`, and it was not
   protected: importing the module took that game to 411 KB. See *Migrating
   `game-jam-template`*, which says where the bytes went and what they buy.
-- **Done means:** `make check` and `make ci` are green; the library checklist is
-  walked with every box checked or waived in the README; the lab runs in a
-  browser and `M`, the spawn key and the overlay all do what they say;
-  `game-jam-template` imports the module and still plays.
+- **Done means, and all four now are:** `make check` and `make ci` are green;
+  the library checklist is walked with every box checked or waived in the
+  README; the lab runs in a browser and `M`, the spawn key and the overlay all
+  do what they say; `game-jam-template` imports the module and still plays.
+  The last of those closed with milestone 6 — the checklist's first box could
+  not be checked by this repository at all, only by a second one importing it.
 
 ## Where it stands
 
@@ -86,8 +88,15 @@ open and press keys in.
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
 | 7. A networked game | **not started** — a brief, below, and two of its groundwork changes already landed |
 
-Two follow-ups, each gated on evidence rather than scheduled:
+Three follow-ups, each gated on evidence rather than scheduled:
 
+- **A `wisp_release` build tag** over `menu.go`, `knobs.go`, `metrics.go` and
+  the settings text format, so a shipped game strips what only a developer
+  looks at. Milestone 6 produced the evidence: importing the module cost
+  `game-jam-template` about 100 KB, and a `strings` scan of the build says all
+  of it is the tuning menu, the settings format and the overlay. It splits the
+  code path in two and every gate would have to run both ways, which is why it
+  is a milestone and not a tidy-up.
 - **A WebGL2 batched renderer**, if and when the number `B` produces is too low.
   It is not: `B` reports about 34,000 sprites at 60 fps over two runs, 9,045 of
   them actually drawn. The overlay's *sort / draw* row splits the frame, so a
@@ -130,6 +139,7 @@ where there is no fullscreen to ask for.
 | Renderer | Canvas2D now. The overlay produces the evidence for a WebGL2 batcher later. |
 | Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — not exposed by browsers`, never a made-up number. |
 | Sheet parsing | A hand-written scanner, not `encoding/json`. See *Aseprite sheets*. |
+| Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. |
 
 ## What the repository holds
 
@@ -153,7 +163,7 @@ wisp-engine/
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
 ├── menu.go              358 the M overlay, canvas-drawn
-├── metrics.go           342 the frame ring, percentiles, the H overlay
+├── metrics.go           344 the frame ring, percentiles, the H overlay
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
@@ -161,8 +171,8 @@ wisp-engine/
 ├── runtime_js.go        465 canvas, events, audio, rAF loop (js && wasm)
 ├── settings.go          211 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
-├── sheet.go             263 Sheet, Frame, Tag, GridSheet, Play, the frame map
-├── sheet_json.go        585 the hand-written Aseprite scanner and its limits
+├── sheet.go             270 Sheet, Frame, Tag, GridSheet, Play, the frame map
+├── sheet_json.go        586 the hand-written Aseprite scanner and its limits
 ├── sheet_test.go        501 the export, the grid equivalence, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
 ├── state.go             197 the state bits, movement, animation, draw order
@@ -172,8 +182,11 @@ wisp-engine/
 └── wisp_test.go        1091 the consumer's view: entities, camera, input, menu
 ```
 
-3,603 lines of engine that build anywhere, 465 behind the browser tag, 2,572 of
-tests, 576 of lab and server.
+3,613 lines of engine that build anywhere, 465 behind the browser tag, 2,604 of
+tests, 576 of lab and server. The counts in that listing are hand-written and
+three were wrong — one from this milestone, two from before it and unnoticed
+since. `wc -l *.go cmd/*/main.go` is how they were put back, and is what to run
+rather than trust them.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -785,7 +798,10 @@ checks is a memory.
 
 ## Verification
 
-Three tiers. All three tools are on this machine now, so all three tiers run.
+Three tiers, plus one thing no tier here can reach. All three tools are on this
+machine now, so all three tiers run — and milestone 6 added the fourth: a second
+project compiles against the published module and its own gates pass, which is
+the only check that the API is usable by somebody who did not write it.
 
 **No extra tools — `make check`.** Green, the two network gates included. It proves the entity store, the camera, the state machine, the settings
 defaults, the knob table's coverage, the menu's whole keyboard, the frame
@@ -1035,9 +1051,12 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 | WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
 | WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
 
-The engine's own numbers for scale: `web/static/lab.wasm` is 234,882 bytes
-against a 320,000 gate, so 85,118 bytes of headroom and the client half wants
-about 8% of it.
+The engine's own numbers for scale: `web/static/lab.wasm` is 237,497 bytes
+against a 320,000 gate, so 82,503 bytes of headroom and the client half wants
+about 8% of it. That headroom is the lab's. A game carries its own code as
+well — `game-jam-template` is at 411 KB with no gate of this module's to sit
+under — so the 10 KB ceiling is a promise about the engine's half and not
+about anybody's finished game.
 
 **The consequence to write down, not to discover.** WebSocket is TCP, so one
 lost packet stalls everything queued behind it. That buys a good 15 to 30 Hz
