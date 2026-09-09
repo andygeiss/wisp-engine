@@ -10,13 +10,13 @@ write down; and the `v0.2.0` tag. The client half missed its size ceiling by
 a measured margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
-**Milestone 7 is decided.** The lab becomes the network client and the server
+**Milestone 7 is decided, and built.** The lab becomes the network client and the server
 that serves it runs the world: the game state lives on the server, the browser
 sends only what the player is trying to do, cooldowns live on the server and
 the client copies them for its bars, and the camera is the client's. That is a
 thin client, and it dissolves three of the four questions the old brief left
-open. *Networking — milestone 7, under way* is the ordered plan, and
-`SPEC.md` carries the wider job as of the same change.
+open. *Networking — milestone 7, playing* is the plan and the record of
+building it, and `SPEC.md` carries the wider job as of the same change.
 
 **Three changes landed ahead of it**: an entity index is now a name the engine
 keeps, the simulation runs on a fixed tick instead of on however long the frame
@@ -41,8 +41,11 @@ everything after it leans on.** It is built, every gate is green, and
 motion is visibly smoother, and that is a claim about `pass` in
 `runtime_js.go`, the one line it changed that no test reaches. Step 8 of
 *Verification* is the check, and it is step 0 of milestone 7: a network client
-draws nothing but that blend, so it is looked at before anything is built on
-it.
+draws nothing but that blend. It was meant to be looked at before anything
+was built on it, and it was not — there was no browser to look with — so the
+client was built on it unseen, and two tabs have since played over it without
+complaint. That is a sign, not the verdict; the verdict is still a walk across
+the floor with the knob on and off.
 
 ## Context
 
@@ -153,8 +156,10 @@ blend is waiting for.
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 75 test functions: 68 tests, five
-examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
+list against the commit and is green too. 130 test functions across six
+packages: 121 tests, five examples, and four fuzz targets with their seeds —
+`FuzzParseSheet`, `FuzzUnmarshalText`, `FuzzDecode` and `FuzzRead`.
+`FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
@@ -1125,7 +1130,7 @@ holding a key no longer re-fires the instant its cooldown ends. Neither is
 hard to put back: the margin is `World.HitBoxMargin` in the tuning menu, and
 the keys are one `JustPressed` to `Down` each.
 
-## Networking — milestone 7, under way
+## Networking — milestone 7, playing
 
 The decision this file said had to come first has been taken, and it is
 narrower than the brief it replaces. **The lab becomes the network client, and
@@ -1133,9 +1138,9 @@ the server that serves the lab also runs the world.** The game state lives on
 the server. The client sends what the player is trying to do — a direction, a
 skill — and gets the world back; the server owns every position and every
 cooldown, and the client owns the camera and everything else a player only
-looks at. The engine's three hooks are written; nothing that touches a socket
-is. This section is the plan, in the order it is built, with each decision
-recorded next to what it decided and each step marked when it lands.
+looks at. All of it is built, and two tabs have played it. This section is
+the plan in the order it was built, with each decision recorded next to what
+it decided, each step marked as it landed, and what each one cost.
 
 ### The brief
 
@@ -1805,9 +1810,15 @@ effect of this work:
   that have happened, which costs up to one tick of lag. Guessing at the tick
   that has not is what a 60 Hz twitch game would want, and it is wrong every
   time something turns around. See *The draw blends between two ticks*.
-- **No networking yet.** Milestone 7 is under way: the engine's three hooks
-  are in, and nothing that touches a socket is written. The transport is
-  decided by the dependency rule and measured.
+- **No prediction, no lockstep, no delta snapshots and no interest
+  management.** A tab draws what the server sent, one tick behind and
+  blended, and a snapshot is the whole world every tick. Each of those is a
+  follow-up with a number in front of it — the latency at which the lag
+  shows, the crowd at which the whole world is too many bytes — and the net
+  line prints the numbers.
+- **No deployment.** Two browsers on one machine is the whole claim. The
+  server that ships, with an ops listener and a `/healthz`, is milestone 8
+  with a brief of its own.
 - **No networked `game-jam-template`.** Its rules run once a frame in the
   update given to `Run`, its action windows are indexed off animation frames,
   and its state is package-level globals with one hero at index 0. All three
@@ -1826,7 +1837,7 @@ effect of this work:
 
 ## Baseline rules waived, on the record
 
-Four, in the README in the six-field format.
+Five, in the README in the six-field format.
 
 1. **No `main` package** (`project-types/library.md`) — the lab is the engine's
    own proof and has to be runnable from one clone. Scoped to `cmd/lab` (js/wasm
@@ -1843,6 +1854,11 @@ Four, in the README in the six-field format.
    that neither appears as a token.
 4. **`make check` has two lines the baseline's does not** (`stack/makefile.md`
    rule 1) — the js/wasm vet, and the size check on the built module.
+5. **Every mutation is a POST route** (`checklists/web-application.md`) — the
+   world's mutations arrive over the WebSocket at `GET /ws`, as intents. The
+   rule protects the no-JS fallback of a plain form, and a canvas client has
+   no such fallback to protect. Scoped to `/ws`; every other route is a GET
+   that changes nothing.
 
 Conformance notes worth repeating here:
 
@@ -1864,6 +1880,9 @@ Conformance notes worth repeating here:
   green against it. That is what turned this from an extraction with one
   consumer — the shape the rule exists to catch — into a module.
 
-Milestone 7 adds two waivers and five conformance notes when its code lands.
-They are written out under *What the README will say* in that milestone's
-section, so this file and the README agree on the day.
+Milestone 7 added the fifth waiver, widened the first to the server the lab
+has now, and put five conformance notes beside them: the hand-written RFC
+6455 and wire, the deadlines set after the hijack, a shutdown that cancels
+first and waits after, `errgroup`'s two jobs done without it, and
+`WriteTimeout` replaced rather than widened. They are written out under *What
+the README says* in that milestone's section, and the README carries them.
