@@ -1,12 +1,13 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is built through step 8
-of 9 — the three engine hooks, the wire, the socket, the lab's rules, the
-server, the replica, the client, and the README, SPEC and Makefile that go
-with them — and so is the hit-box half of step 0. What is left needs a person
-at a browser: the other half of step 0, looking at the blend, and step 9, two
-tabs playing one world, the numbers, and the tag. The client half missed its
-size ceiling by a measured margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
+**Status: milestones 1 to 6 are built and green, and 7 plays: two tabs on
+one machine play one world, which Andy confirmed in a browser on 2026-09-09.
+Every step of it is built — the three engine hooks, the wire, the socket, the
+lab's rules, the server, the replica, the client, the README, SPEC and
+Makefile, and the hit-box half of step 0. Three things are still open: the
+blend verdict, which is the other half of step 0; the numbers step 9 asks to
+write down; and the `v0.2.0` tag. The client half missed its size ceiling by
+a measured margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -107,7 +108,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **built through step 8 of 9** — everything but the two-browser run and the tag, which wait on a browser along with the blend verdict of step 0; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **plays** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers and the tag of step 9 and the blend verdict of step 0 are what is left; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -1750,14 +1751,19 @@ Each step is green on its own and is its own commit.
    wire; the Makefile's two comments that named the old server and the old
    size say the new ones.
 9. **Two browsers**, the list below; the numbers into this file; `make ci`;
-   tag `v0.2.0`, with the three hooks named in the tag message.
+   tag `v0.2.0`, with the three hooks named in the tag message — **the two
+   browsers are done**: Andy played it in two tabs on 2026-09-09 and it
+   works, and `make ci` is green on the commit that records it. The numbers
+   below and the tag are still to come.
 
 ### Verification
 
 - `make check` and `make ci` green; `go list -deps .` still the standard
   library; `make wasm` under 320,000 and the new size written into *Gates*.
 - `go test -race ./cmd/serve`: the piped clients of step 5.
-- Two tabs on `make run`: both sprites in both tabs; moving one moves it in
+- **Played on 2026-09-09: two tabs, one world, and it works.** Which of the
+  lines below were walked one by one is Andy's to say, and Safari and Firefox
+  are not claimed. Two tabs on `make run`: both sprites in both tabs; moving one moves it in
   the other; `Q` next to a bouncer removes it in both; `E` adds ten in both;
   `R` is visibly faster and its bar refills over five seconds; a key on
   cooldown does nothing; `World.Speed` nudged in one tab's menu changes
@@ -1765,7 +1771,8 @@ Each step is green on its own and is its own commit.
   for the socket and the console.
 - The cheat check: an intent with a dx of 100 moves at 1, and `Q` held down
   moves nothing until the server's cooldown is up.
-- **Numbers to write down**, because a claim nothing measures is a memory: the
+- **Numbers to write down — still to write down** — because a claim nothing
+  measures is a memory: the
   module's bytes before and after; snapshot bytes a tick at 100 and at 1000
   bouncers; the client's KB/s in; the RTT on localhost; holds and
   fast-forwards a minute at rest; the server's CPU at 1000 bouncers with two
