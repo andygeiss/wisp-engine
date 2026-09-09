@@ -68,6 +68,7 @@ type CloseError struct {
 	Reason string
 }
 
+// Error names the code, and the reason when there is one.
 func (e *CloseError) Error() string {
 	if e.Reason == "" {
 		return "ws: closed with " + strconv.Itoa(int(e.Code))

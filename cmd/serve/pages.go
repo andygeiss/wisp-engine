@@ -119,6 +119,7 @@ type statusWriter struct {
 	status int
 }
 
+// WriteHeader records the status and passes it on.
 func (w *statusWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
