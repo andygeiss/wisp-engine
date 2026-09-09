@@ -81,10 +81,10 @@ Two follow-ups, each gated on evidence rather than scheduled:
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 43 test functions: 38 tests, four
+list against the commit and is green too. 45 test functions: 40 tests, four
 examples, and one fuzz target with its seeds.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 233,832 bytes — 228
+`make wasm` has run. `web/static/lab.wasm` is committed at 233,635 bytes — 228
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
@@ -124,12 +124,12 @@ wisp-engine/
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
-├── internal_test.go     437 draw order, layering, menu widths, the frame ring
+├── internal_test.go     481 draw order, layering, menu widths, the frame ring
 ├── knobs.go             321 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
 ├── menu.go              352 the M overlay, canvas-drawn
-├── metrics.go           314 the frame ring, percentiles, the H overlay
+├── metrics.go           331 the frame ring, percentiles, the H overlay
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
@@ -145,7 +145,7 @@ wisp-engine/
 └── wisp_test.go         833 the consumer's view: entities, camera, input, menu
 ```
 
-2,359 lines of engine that build anywhere, 579 behind the browser tag, 1,765 of
+2,376 lines of engine that build anywhere, 579 behind the browser tag, 1,809 of
 tests, 520 of lab and server.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
@@ -213,7 +213,7 @@ Nine, each with the test that pins it.
 
 ## Fixes on the first real run
 
-Five, from installing TinyGo and opening the page for the first time. Every
+Six, from installing TinyGo and opening the page for the first time. Every
 one of them was invisible to `make check`, because a green gate says nothing
 about a tree nobody serves, a scene nobody looks at, a line of text nobody
 measures, or a number nobody reads.
@@ -223,6 +223,7 @@ measures, or a number nobody reads.
 | `GET /static/js/wasm_exec.js` answered 404, and `make wasm` had never produced anything. `sheets` and `wasm` wrote under `cmd/serve/web/static/`, a directory that does not exist — so the target died on its first `cp`, silently, every time. | Both targets now write to `web/`, the tree `cmd/serve` actually reads and where the committed art already lived. It is also where the baseline's `go-project-layout.md` puts it. |
 | `WASM_MAX_BYTES` was declared and never read. Its own comment called it "the headline number, as a gate", and the `wasm` target's said "the size check is last" — but nothing compared anything. | The target's last line is the comparison. A claim nothing checks is a memory, including this one. |
 | **The menu's hint line was cut off at the right border**, showing "T te" for "T test". | The panel is pinned to the canvas's right edge and its text is left-aligned inside it, so a line wider than the panel is not clipped to the panel — it is drawn past the edge of the canvas and its tail is gone. The hint was 32 characters where 29 fit. `menuCols` now states the budget with its arithmetic, the hint is `←→ tune  ⇧ x10  C copy  T hit`, and `TestMenuTextFits` checks every fixed string, every knob's footer and every knob row against it, counting runes rather than bytes — `←` is three bytes and one column. |
+| **The frame budget rose with the load, so nothing could ever be reported as slow.** At 20,000 sprites `Budget` read 200 ms on a display that was still 60 Hz. | `budget()` was the middle of the current window, which measures the display only while the scene keeps up: once every frame is slow the middle rises with them, slow becomes the new normal, and the overlay calls a scene running at five frames a second comfortably inside budget. It is now the *lowest* the middle has been — a property of the hardware, free to fall as the true interval is learned but never to rise with the load. The middle rather than the single fastest frame, because one coalesced callback would otherwise latch a two-millisecond "display" for the rest of the run and make every frame after it late. |
 | **The ramp never produced a number, and neither did anything else that judged a frame.** `B` reset the scene, waited, stopped instantly and displayed nothing. | `budget()` is the *middle* of the two-second window, so about half a healthy scene's frames sit just above it — and three places compared against it as though it were a ceiling. The ramp stopped the first time it looked, at zero sprites, which `renderUI` then hid because it only showed a ceiling above zero. The `p50 / p99` row was permanently amber and half the sparkline bars with it. `lateFrame = 1.5` now names the rule the dropped-frame counter already used, `Stats.Late` carries it out to the lab, and `rampSettle` covers the whole window instead of half of it — at 1000 ms the window still held the reset, whose frames are exactly the ones the 99th percentile reports. `rampCeiling` starts at -1, so a ceiling of zero is a result the lab shows rather than one it swallows. |
 | **The floor drew over the sprites.** About a third of every spawned batch came out with its lower half repainted by the tiles under it, which reads on screen as sprites that are clipped and half transparent. | `AddTilemap` was called without `Z`, so 960 floor tiles landed on layer 0 — and `spawn` picks `Z` from `rand.IntN(3)`, so one sprite in three joined them there. Inside a layer the sort is by baseline, so every tile below a sprite's middle draws after it. The floor moved to `zFloor = -1`. `TestTilemapBelowStaysBelow` pins it, and fails with 8 of 16 tiles on top when the layer is shared. |
 
@@ -508,7 +509,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 233,832 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 233,635 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. Also settle the `ReadMemStats`
 question before trusting the heap row, and use
 `tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` to see which

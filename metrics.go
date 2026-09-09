@@ -89,6 +89,10 @@ type metrics struct {
 	dropped  int
 	updateMs float64
 
+	// refresh is the display's own frame interval: the smallest window median
+	// seen so far. See budget.
+	refresh float64
+
 	heapAt      float64
 	goHeapBytes uint64
 }
@@ -98,20 +102,33 @@ func (m *metrics) add(ms float64) {
 	m.frames[m.next] = ms
 	m.next = (m.next + 1) % metricsWindow
 	m.n = min(m.n+1, metricsWindow)
+	// The display's interval is the lowest this window's middle has ever
+	// been: the scene is at its lightest somewhere, and nothing a game does
+	// makes the hardware faster. Taking the middle rather than the single
+	// fastest frame is what makes it safe to keep — one coalesced callback
+	// would latch a two-millisecond "display" for the rest of the run, and
+	// every frame after it would count as late.
+	if m.n >= metricsWindow/4 {
+		if mid := m.percentile(0.5); m.refresh == 0 || mid < m.refresh {
+			m.refresh = mid
+		}
+	}
 	if b := m.budget(); b > 0 && ms > b*lateFrame {
 		m.dropped++
 	}
 }
 
-// budget is one frame's worth of milliseconds, taken from the middle of the
-// window. Measuring it beats assuming 16.7: a 120 Hz display has half of that,
-// and a load figure against the wrong budget is worse than none.
-func (m *metrics) budget() float64 {
-	if m.n < metricsWindow/4 {
-		return 0
-	}
-	return m.percentile(0.5)
-}
+// budget is one frame's worth of milliseconds. Measuring it beats assuming
+// 16.7: a 120 Hz display has half of that, and a load figure against the wrong
+// budget is worse than none.
+//
+// It is the lowest the window's middle has been, not the middle of the window
+// now. The middle now measures the display only while the scene keeps up: at
+// twenty thousand sprites every frame is slow and the middle rises with them,
+// so slow becomes the new normal and nothing can ever be late again. The
+// budget is a property of the hardware, so it may fall as the true interval is
+// learned and must never rise with the load.
+func (m *metrics) budget() float64 { return m.refresh }
 
 // percentile returns the frame at p through the window, sorted. It sorts a
 // fixed scratch array in place, so it allocates nothing however often it runs.

@@ -435,3 +435,47 @@ func TestLateFramesAreLate(t *testing.T) {
 		t.Error("40 ms frames on a 16.7 ms budget dropped nothing")
 	}
 }
+
+func TestBudgetDoesNotRiseWithLoad(t *testing.T) {
+	t.Parallel()
+	// The budget is the display's frame interval, so it is a property of the
+	// hardware and nothing a scene does may raise it. When it was the middle
+	// of the window it rose with the load: at a uniform 200 ms the budget read
+	// 200 ms, every threshold moved with it, and the overlay reported a scene
+	// running at five frames a second as comfortably inside budget.
+	var m metrics
+	for range metricsWindow {
+		m.add(16.67)
+	}
+	display := m.budget()
+	if display < 16 || display > 17 {
+		t.Fatalf("budget %v does not look like a 60 Hz display", display)
+	}
+
+	for range metricsWindow {
+		m.add(200.0)
+	}
+	if got := m.budget(); got != display {
+		t.Errorf("budget rose to %v under load, want it held at %v", got, display)
+	}
+	if p99 := m.percentile(0.99); p99 <= m.budget()*lateFrame {
+		t.Errorf("200 ms frames on a %v ms display are not late: p99 %v", display, p99)
+	}
+}
+
+func TestBudgetFallsToTheTrueInterval(t *testing.T) {
+	t.Parallel()
+	// It may still fall: the first window can be slow while assets land, and
+	// the real interval is only learned once the scene is light.
+	var m metrics
+	for range metricsWindow {
+		m.add(50.0)
+	}
+	slow := m.budget()
+	for range metricsWindow {
+		m.add(16.67)
+	}
+	if got := m.budget(); got >= slow {
+		t.Errorf("budget stayed at %v after the scene settled to 16.67, want it to fall", got)
+	}
+}
