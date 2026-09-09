@@ -208,7 +208,7 @@ func (e *Engine) AddTilemap(m Tilemap) {
 }
 
 // BoundingBox returns the left, top, right and bottom edge of entity i's hit
-// box: the sprite shrunk by [CollisionSettings] Margin on all four sides, so
+// box: the sprite shrunk by [WorldSettings.HitBoxMargin] on all four sides, so
 // sprites have to visibly overlap before they collide. A margin past half the
 // sprite gives a box of zero size, which never collides.
 //
