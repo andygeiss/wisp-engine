@@ -1,8 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is under way: the three
-engine hooks of step 1 are built, the hit-box half of step 0 is built, and the
-other half of step 0 — looking at the blend — is still open.** This file is both the plan and the record — what was decided, what was
+**Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 and
+2 of 9 are built — the three engine hooks and the wire — and so is the hit-box
+half of step 0; the other half of step 0, looking at the blend, is still
+open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -103,7 +104,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — step 1 of 9, the three engine hooks, is built, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — steps 1 and 2 of 9 are built, the three engine hooks and the wire, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -206,6 +207,9 @@ wisp-engine/
 ├── host.go              127 the same API, headless (!js || !wasm)
 ├── host_test.go          48 what the headless twin recorded, read back
 ├── input.go             133 key state, edge detection, the menu's lock
+├── internal/
+│   └── wire/wire.go         1 the ten messages and their bytes
+│   └── wire/wire_test.go    1 round trips, the four refusals, the fuzz target
 ├── internal_test.go     693 draw order, layering, frame mapping, source rects
 ├── knobs.go             323 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
@@ -1287,7 +1291,7 @@ for in kilobytes and fails at in a browser. `binary.BigEndian` and
 | server → client | Spawn | slot u16, image u8, column u8, row u8, width u16, height u16, x f32, y f32, z i8, alpha u8, state u64 |
 | server → client | Despawn | slot u16 |
 | server → client | Snapshot | tick u32, n u16, then n × { slot u16, x f32, y f32, state u64, row u8 } — 19 bytes an actor |
-| server → client | You | tick u32, one u16 per skill: milliseconds of cooldown left |
+| server → client | You | tick u32, n u8, then n × u16: milliseconds of cooldown left, in skill order |
 | server → client | Event | tick u32, slot u16 (who), skill u8, x f32, y f32 |
 | server → client | Pong | t u32 echoed, tick u32 |
 
@@ -1299,6 +1303,18 @@ and only what is near, are follow-ups that get written when a number says so.
 Tests: every message round-trips; a truncated body is an error and not a
 panic; a fuzz target over the decoder, under the rule the sheet fuzzer has —
 whatever it accepts has to be safe to apply.
+
+**Built.** `internal/wire` is one file of messages and one of tests, and
+nothing in it imports more than `encoding/binary`, `errors` and `math`. One
+byte moved on the wire while writing it: `You` carries `n u8` ahead of its
+cooldowns, so the decoder is self-describing rather than dividing whatever is
+left by two. The decoder checks a Snapshot's count against the bytes before it
+allocates for it — a count that lies is `ErrShort`, not an allocation —
+refuses NaN and the infinities in every position the way the sheet scanner
+does, and the tests assert that every prefix of every one of the ten messages
+is `ErrShort` and every message plus one byte is `ErrLong`. `FuzzDecode` ran
+for 15 seconds — 16.4 million executions — under the rule that whatever it
+accepts re-encodes to the bytes it came from, and found nothing.
 
 ### The server
 
@@ -1489,7 +1505,7 @@ Each step is green on its own and is its own commit.
    at 1,607 bytes; *Where it stands* has the shape.
 1. **The three hooks**, with their tests, and the byte delta from `make wasm`
    — **done**; the delta is 36 bytes down.
-2. **`internal/wire`**: the round-trip tests and the fuzz target.
+2. **`internal/wire`**: the round-trip tests and the fuzz target — **done**.
 3. **`internal/ws`**: the handshake vector, masked and unmasked, fragmented,
    close, the length lie, ping and pong, the control-frame rules; a fuzz target
    over the frame reader.
