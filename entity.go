@@ -36,8 +36,28 @@ type Sprite struct {
 	Z int
 }
 
+// ID names one entity for as long as it lives, and never names another one.
+//
+// An index is a position in the entity arrays. It is stable — a delete leaves
+// its slot where it is — but it is not unique for ever, because the next Add
+// reuses the slot. An ID carries the generation of the entity that filled it
+// as well, so an ID left over from the entity before resolves to nothing
+// rather than to a stranger.
+//
+// Hold an ID when the entity has to survive being deleted by somebody else:
+// across frames, between a game and its server, inside a packet. Do the work
+// through the index it resolves to, which is what every array is keyed by, and
+// resolve once rather than in a loop.
+//
+// The zero ID names nothing.
+type ID uint64
+
 // Add adds an entity and returns its index. The sprite is drawn centred on
 // (X, Y).
+//
+// The index is stable: it keeps meaning this entity until the entity is
+// deleted. It is reused after that, so an index held across a delete needs an
+// [ID] instead — see [Engine.IDOf].
 func (e *Engine) Add(s Sprite) (index int) {
 	if s.Alpha == 0 {
 		s.Alpha = 1
@@ -45,23 +65,91 @@ func (e *Engine) Add(s Sprite) (index int) {
 	if s.SpeedFactor == 0 {
 		s.SpeedFactor = 1
 	}
-	index = len(e.State)
-	e.Alpha = append(e.Alpha, s.Alpha)
-	e.FrameOffset = append(e.FrameOffset, 0)
-	e.FrameTime = append(e.FrameTime, 0)
-	e.ImageColumn = append(e.ImageColumn, s.Column)
-	e.ImageIndex = append(e.ImageIndex, s.Image)
-	e.ImageRow = append(e.ImageRow, s.Row)
-	e.ScreenSpace = append(e.ScreenSpace, s.ScreenSpace)
-	e.SpeedFactor = append(e.SpeedFactor, s.SpeedFactor)
-	e.SpriteHeight = append(e.SpriteHeight, s.Height)
-	e.SpriteWidth = append(e.SpriteWidth, s.Width)
-	e.State = append(e.State, s.State)
-	e.X = append(e.X, s.X)
-	e.Y = append(e.Y, s.Y)
-	e.Z = append(e.Z, s.Z)
+	index = e.claim()
+	e.set(index, s)
+	e.gen[index] = e.nextGen
 	e.drawOrder = append(e.drawOrder, index)
 	return index
+}
+
+// IDOf returns the ID of entity i, or the zero ID when i holds no entity.
+func (e *Engine) IDOf(i int) ID {
+	if !e.Live(i) {
+		return 0
+	}
+	return ID(uint64(e.gen[i])<<32 | uint64(uint32(i)))
+}
+
+// Index returns the index id names, or -1 when that entity is gone — deleted,
+// or cleared by [Engine.Reset]. A slot reused since is gone too, which is the
+// whole reason an ID is not just an index.
+func (e *Engine) Index(id ID) int {
+	i := int(uint32(id))
+	if !e.Live(i) || e.gen[i] != uint32(id>>32) {
+		return -1
+	}
+	return i
+}
+
+// claim returns a slot to write an entity into, reusing a deleted one when
+// there is one and growing the arrays when there is not.
+//
+// Reuse is what makes an index stable. Compacting the arrays on every delete
+// moved every entity above the hole, so an index a game was holding silently
+// came to mean its neighbour — and an index in a packet could not mean
+// anything at all by the time the packet arrived.
+func (e *Engine) claim() (index int) {
+	// One counter for the whole engine rather than one per slot, so an ID
+	// stays unique across [Engine.Reset] too. It wraps after four billion
+	// entities, which is longer than a browser tab lives.
+	e.nextGen++
+	e.live++
+
+	if n := len(e.free); n > 0 {
+		index = e.free[n-1]
+		e.free = e.free[:n-1]
+		e.alive[index] = true
+		return index
+	}
+
+	index = len(e.State)
+	e.Alpha = append(e.Alpha, 0)
+	e.FrameOffset = append(e.FrameOffset, 0)
+	e.FrameTime = append(e.FrameTime, 0)
+	e.ImageColumn = append(e.ImageColumn, 0)
+	e.ImageIndex = append(e.ImageIndex, 0)
+	e.ImageRow = append(e.ImageRow, 0)
+	e.ScreenSpace = append(e.ScreenSpace, false)
+	e.SpeedFactor = append(e.SpeedFactor, 0)
+	e.SpriteHeight = append(e.SpriteHeight, 0)
+	e.SpriteWidth = append(e.SpriteWidth, 0)
+	e.State = append(e.State, 0)
+	e.X = append(e.X, 0)
+	e.Y = append(e.Y, 0)
+	e.Z = append(e.Z, 0)
+	e.alive = append(e.alive, true)
+	e.gen = append(e.gen, 0)
+	return index
+}
+
+// set writes sprite s into slot i, which every array already has room for. Add
+// fills a slot with it and Delete empties one with the zero Sprite, so the two
+// halves of a slot's life are one list of fields rather than two.
+func (e *Engine) set(i int, s Sprite) {
+	e.Alpha[i] = s.Alpha
+	e.FrameOffset[i] = 0
+	e.FrameTime[i] = 0
+	e.ImageColumn[i] = s.Column
+	e.ImageIndex[i] = s.Image
+	e.ImageRow[i] = s.Row
+	e.ScreenSpace[i] = s.ScreenSpace
+	e.SpeedFactor[i] = s.SpeedFactor
+	e.SpriteHeight[i] = s.Height
+	e.SpriteWidth[i] = s.Width
+	e.State[i] = s.State
+	e.X[i] = s.X
+	e.Y[i] = s.Y
+	e.Z[i] = s.Z
 }
 
 // Tilemap describes a grid of tiles to add as entities, one per cell.
@@ -132,47 +220,62 @@ func (e *Engine) BoundingBox(i int) (l, t, r, b float64) {
 	return e.X[i] - hw, e.Y[i] - hh, e.X[i] + hw, e.Y[i] + hh
 }
 
-// Count returns how many entities there are. Every index below it is valid.
-func (e *Engine) Count() int { return len(e.State) }
-
-// Delete removes entity i. Every index above i shifts down by one, so a game
-// holding indices must shift them too; CamTarget and InputTarget are shifted
-// here. Hiding an entity and reusing it later is cheaper than deleting it,
-// which is what a game with many short-lived entities should do.
+// Count returns how many entities there are.
 //
-// It panics when i is not an entity, which is a programmer error.
+// It is not the range to iterate. A deleted entity leaves its slot behind, so
+// the arrays can be longer than the count — use [Engine.Slots] for the range
+// and [Engine.Live] to skip the holes.
+func (e *Engine) Count() int { return e.live }
+
+// Slots returns the length of every entity array, which is the range to
+// iterate:
+//
+//	for i := range e.Slots() {
+//		if !e.Live(i) {
+//			continue
+//		}
+//		...
+//	}
+//
+// It only ever grows while entities exist, because a deleted entity's slot is
+// kept for the next one. [Engine.Reset] returns it to zero.
+func (e *Engine) Slots() int { return len(e.State) }
+
+// Live reports whether slot i holds an entity. It is false for a deleted slot
+// and for an index outside the arrays, so it is safe to ask about anything.
+func (e *Engine) Live(i int) bool { return i >= 0 && i < len(e.alive) && e.alive[i] }
+
+// Delete removes entity i and keeps its slot for the next [Engine.Add]. No
+// other index moves, so a game — or a packet — may hold an index across a
+// delete of somebody else.
+//
+// The slot is emptied rather than compacted away: it becomes a 0x0 invisible
+// entity with no state bits, which the update and the draw skip on the tests
+// they already do. Deleting the same entity twice does nothing the second
+// time, so a game holding an index does not have to track whether it already
+// used it. CamTarget and InputTarget are cleared to -1 when they point here.
+//
+// It panics when i is outside the arrays, which is a programmer error.
 func (e *Engine) Delete(i int) {
-	e.Alpha = slices.Delete(e.Alpha, i, i+1)
-	e.FrameOffset = slices.Delete(e.FrameOffset, i, i+1)
-	e.FrameTime = slices.Delete(e.FrameTime, i, i+1)
-	e.ImageColumn = slices.Delete(e.ImageColumn, i, i+1)
-	e.ImageIndex = slices.Delete(e.ImageIndex, i, i+1)
-	e.ImageRow = slices.Delete(e.ImageRow, i, i+1)
-	e.ScreenSpace = slices.Delete(e.ScreenSpace, i, i+1)
-	e.SpeedFactor = slices.Delete(e.SpeedFactor, i, i+1)
-	e.SpriteHeight = slices.Delete(e.SpriteHeight, i, i+1)
-	e.SpriteWidth = slices.Delete(e.SpriteWidth, i, i+1)
-	e.State = slices.Delete(e.State, i, i+1)
-	e.X = slices.Delete(e.X, i, i+1)
-	e.Y = slices.Delete(e.Y, i, i+1)
-	e.Z = slices.Delete(e.Z, i, i+1)
-
-	// drawOrder holds indices, not positions, so it is rebuilt in place.
-	n := 0
-	for _, idx := range e.drawOrder {
-		if idx == i {
-			continue
-		}
-		if idx > i {
-			idx--
-		}
-		e.drawOrder[n] = idx
-		n++
+	if !e.alive[i] {
+		return
 	}
-	e.drawOrder = e.drawOrder[:n]
+	e.set(i, Sprite{})
+	e.alive[i] = false
+	e.free = append(e.free, i)
+	e.live--
 
-	e.CamTarget = shiftIndex(e.CamTarget, i)
-	e.InputTarget = shiftIndex(e.InputTarget, i)
+	// drawOrder holds indices, and no index moved, so only this one goes.
+	if n := slices.Index(e.drawOrder, i); n >= 0 {
+		e.drawOrder = slices.Delete(e.drawOrder, n, n+1)
+	}
+
+	if e.CamTarget == i {
+		e.CamTarget = -1
+	}
+	if e.InputTarget == i {
+		e.InputTarget = -1
+	}
 }
 
 // HasCollision reports whether the hit boxes of entities i and j overlap.
@@ -184,6 +287,9 @@ func (e *Engine) HasCollision(i, j int) bool {
 
 // Reset removes every entity, keeping the capacity the slices have grown to. A
 // game calls it once per scene. It leaves the settings and the camera alone.
+//
+// Every [ID] handed out before it stops resolving, so a stale one cannot come
+// back to life as an entity in the new scene.
 func (e *Engine) Reset() {
 	e.Alpha = e.Alpha[:0]
 	e.FrameOffset = e.FrameOffset[:0]
@@ -199,17 +305,10 @@ func (e *Engine) Reset() {
 	e.X = e.X[:0]
 	e.Y = e.Y[:0]
 	e.Z = e.Z[:0]
+	e.alive = e.alive[:0]
+	e.gen = e.gen[:0]
+	e.free = e.free[:0]
+	e.live = 0
 	e.drawOrder = e.drawOrder[:0]
 	e.CamTarget, e.InputTarget = -1, -1
-}
-
-// shiftIndex returns where a held index points after entity deleted is gone.
-func shiftIndex(idx, deleted int) int {
-	switch {
-	case idx == deleted:
-		return -1
-	case idx > deleted:
-		return idx - 1
-	}
-	return idx
 }

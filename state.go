@@ -141,7 +141,7 @@ func (e *Engine) sortDrawOrder() {
 // Entities with no move bits and no bit in RowMask — tiles, HUD sprites — are
 // skipped, which is most of them.
 func (e *Engine) updateStates(dt float64) {
-	if e.InputTarget >= 0 && e.InputTarget < len(e.State) {
+	if e.Live(e.InputTarget) {
 		e.applyInput(e.InputTarget)
 	}
 

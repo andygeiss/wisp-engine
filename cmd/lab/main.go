@@ -61,11 +61,16 @@ const (
 
 // A spawned sprite carries its own velocity: the engine moves entities by
 // state bits, which is a game's job to set, and bouncing is this lab's game.
+//
+// spawned holds their entity indices rather than counting from a base index.
+// A delete leaves its slot for the next spawn instead of moving everybody
+// below it down, so which slot a sprite lands in is the engine's business —
+// and the index it hands back is a name that keeps working.
 var (
-	first  int // the index the spawned sprites start at
-	player int
-	vx     []float64
-	vy     []float64
+	player  int
+	spawned []int
+	vx      []float64
+	vy      []float64
 
 	// The automatic ramp: it adds sprites until the frame time breaks, then
 	// stops and holds the count. That number is what the lab exists to find.
@@ -103,7 +108,7 @@ func main() {
 // for.
 func build(e *wisp.Engine) {
 	e.Reset()
-	vx, vy = vx[:0], vy[:0]
+	spawned, vx, vy = spawned[:0], vx[:0], vy[:0]
 	ramping, rampAt, rampCeiling, rampDrawn, settled = false, 0, -1, 0, 0
 
 	tiles := make([]int, tilesCols*tilesRows)
@@ -126,7 +131,6 @@ func build(e *wisp.Engine) {
 		Width: tileSize, X: worldW / 2, Y: worldH / 2, Z: 1,
 	})
 	e.CamTarget, e.InputTarget = player, player
-	first = e.Count()
 }
 
 // spawn adds n sprites inside the view, moving, animating and spread over
@@ -149,21 +153,24 @@ func spawn(e *wisp.Engine, n int) {
 			Z:     rand.IntN(3),
 		})
 		e.FrameOffset[i] = rand.IntN(e.Animation.FrameCount)
+		spawned = append(spawned, i)
 		vx = append(vx, (rand.Float64()*2-1)*0.15)
 		vy = append(vy, (rand.Float64()*2-1)*0.15)
 	}
 }
 
-// despawn removes the last n spawned sprites. It deletes from the end, so no
-// index below it ever shifts.
+// despawn removes the last n spawned sprites, newest first, and forgets their
+// velocities with them.
 func despawn(e *wisp.Engine, n int) {
 	for range n {
-		if e.Count() <= first {
+		last := len(spawned) - 1
+		if last < 0 {
 			return
 		}
-		e.Delete(e.Count() - 1)
-		vx = vx[:len(vx)-1]
-		vy = vy[:len(vy)-1]
+		e.Delete(spawned[last])
+		spawned = spawned[:last]
+		vx = vx[:last]
+		vy = vy[:last]
 	}
 }
 
@@ -179,7 +186,7 @@ func update(e *wisp.Engine, dt float64) {
 	case e.Input.JustPressed("["):
 		despawn(e, batch)
 	case e.Input.JustPressed("0"):
-		despawn(e, e.Count()-first)
+		despawn(e, len(spawned))
 	case e.Input.JustPressed("p"):
 		e.Paused = !e.Paused
 	case e.Input.JustPressed("n"):
@@ -199,8 +206,7 @@ func update(e *wisp.Engine, dt float64) {
 	ramp(e, dt)
 
 	// Bounce every spawned sprite off the world edges.
-	for n := range vx {
-		i := first + n
+	for n, i := range spawned {
 		e.X[i] += vx[n] * dt
 		e.Y[i] += vy[n] * dt
 		if e.X[i] < 0 || e.X[i] > worldW {
@@ -218,7 +224,7 @@ func startRamp(e *wisp.Engine) {
 		ramping = false
 		return
 	}
-	despawn(e, e.Count()-first)
+	despawn(e, len(spawned))
 	e.Debug.ShowMetrics = true
 	ramping, rampAt, rampCeiling, rampDrawn, settled = true, 0, -1, 0, 0
 }
@@ -244,7 +250,7 @@ func ramp(e *wisp.Engine, dt float64) {
 	// the first check every time.
 	if s.P99Ms > s.Late {
 		ramping = false
-		rampCeiling = e.Count() - first
+		rampCeiling = len(spawned)
 		rampDrawn = s.Drawn
 		return
 	}
@@ -265,7 +271,7 @@ func renderUI(e *wisp.Engine) {
 		e.Text(e.Width/2, e.Height/2, "Click to start", "white", "24px system-ui, sans-serif", "center")
 		return
 	}
-	status := "sprites " + itoa(e.Count()-first)
+	status := "sprites " + itoa(len(spawned))
 	switch {
 	case ramping:
 		status += "   ramping..."

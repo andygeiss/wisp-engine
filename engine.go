@@ -32,7 +32,8 @@ const KeyNone = "-"
 // Entities live in a structure of arrays. Every attribute is its own slice and
 // an entity is an index into all of them, so a game reaches into e.X[i]
 // instead of calling a getter, and adding an entity allocates nothing once the
-// slices have grown.
+// slices have grown. An index keeps meaning the same entity until that entity
+// is deleted; see [ID] for a name that outlives one.
 //
 // Settings is embedded, so the knob you nudge while tuning is short —
 // e.Feel.Heavy.ShakeMagnitude — and the whole set is still one value the menu
@@ -44,7 +45,8 @@ type Engine struct {
 	Settings
 
 	// The entity store: one slice per attribute, one index per entity. Every
-	// slice has the same length, and len(State) is the entity count.
+	// slice has the same length, which is [Engine.Slots] — not the entity
+	// count, because a deleted entity keeps its slot for the next one.
 
 	// Alpha is the opacity, 0 to 1.
 	Alpha []float64
@@ -120,6 +122,25 @@ type Engine struct {
 	// menu draws after this, so it stays on top.
 	RenderUI func()
 
+	// Simulate moves the game's own world, and runs at the fixed rate
+	// [TimeSettings.TickRate] sets rather than once per frame. Put movement,
+	// physics and anything a rule depends on here: it is called with the same
+	// dt every time, so the same input twice gives the same answer twice,
+	// which is what a replay — and one day a rollback — needs.
+	//
+	// Read held keys here with [Input.Down]. An edge belongs in the update
+	// given to [Engine.Run], which runs once per frame: a frame can carry two
+	// ticks or none, so a JustPressed read here fires twice or not at all.
+	Simulate func(dt float64)
+
+	// The entity store's bookkeeping. alive and gen are one entry per slot;
+	// free holds the slots a delete left behind, newest first.
+	alive   []bool
+	free    []int
+	gen     []uint32
+	live    int
+	nextGen uint32
+
 	camMaxX, camMaxY float64
 	camMinX, camMinY float64
 
@@ -139,6 +160,8 @@ type Engine struct {
 	shakeLeft  float64
 	shakeMag   float64
 	shakeTotal float64
+
+	tickAccum float64
 
 	stopped bool
 	update  func(dt float64)
@@ -191,6 +214,12 @@ func (e *Engine) SetWorldSize(width, height float64) {
 // moves things by dt stops for free, and a game that reads keys still reads
 // them.
 //
+// The simulation does not run on that time. Step spends it on whole
+// [Engine.Tick] calls of a fixed length and carries the remainder, so how far
+// anything moves stops depending on how long the frame took. Everything the
+// player only looks at — the camera, the shake, the animations, the menu —
+// stays on the frame, because it has nothing to agree with anybody about.
+//
 // [Engine.Run] calls Step once per frame. A test calls it directly.
 func (e *Engine) Step(elapsed float64) {
 	elapsed = min(max(elapsed, 0), e.Time.MaxStep)
@@ -207,7 +236,7 @@ func (e *Engine) Step(elapsed float64) {
 	if e.update != nil {
 		e.update(dt)
 	}
-	e.updateStates(dt)
+	e.runTicks(dt)
 	e.updateCamera(dt, elapsed)
 	e.advanceAnimations(dt)
 	e.Input.endFrame()
@@ -215,6 +244,45 @@ func (e *Engine) Step(elapsed float64) {
 
 	e.metrics.add(elapsed)
 	e.metrics.sampleHeap(elapsed)
+}
+
+// Tick advances the simulation by exactly dt milliseconds: the game's
+// [Engine.Simulate] first, then the engine's own movement.
+//
+// [Engine.Step] calls it as often as the frame's time paid for, which is what
+// a game wants. Call it directly to run the simulation on a clock that is not
+// this machine's — a server's tick, or a replay of one whose input you already
+// have — which is why it takes the step instead of reading a clock.
+func (e *Engine) Tick(dt float64) {
+	if e.Simulate != nil {
+		e.Simulate(dt)
+	}
+	e.updateStates(dt)
+}
+
+// runTicks spends the world time this frame earned on whole ticks and carries
+// what is left over into the next frame.
+//
+// The loop cannot run away. Step has already capped elapsed at
+// [TimeSettings.MaxStep], so one frame buys at most MaxStep worth of ticks
+// however long the tab was asleep — the same cap that stopped a background tab
+// teleporting everything.
+func (e *Engine) runTicks(dt float64) {
+	step := e.tickStep()
+	e.tickAccum += dt
+	for e.tickAccum >= step {
+		e.Tick(step)
+		e.tickAccum -= step
+	}
+}
+
+// tickStep is one tick in milliseconds. A rate of zero or less would divide by
+// zero, so it falls back to the 60 a second [Defaults] sets.
+func (e *Engine) tickStep() float64 {
+	if e.Time.TickRate <= 0 {
+		return 1000.0 / 60
+	}
+	return 1000 / e.Time.TickRate
 }
 
 // Impact applies one hit's worth of feel: a hit stop and a shake, in the

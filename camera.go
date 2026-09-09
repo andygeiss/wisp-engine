@@ -40,7 +40,7 @@ func (e *Engine) clampToWorld() {
 // look-ahead and the smoothing.
 func (e *Engine) follow(dt float64) {
 	i := e.CamTarget
-	if i < 0 || i >= len(e.State) {
+	if !e.Live(i) {
 		return
 	}
 

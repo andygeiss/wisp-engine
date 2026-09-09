@@ -138,6 +138,7 @@ func knobTable() []knob {
 		floatKnob("Time", "FullscreenDebounce", 0, 2000, 50, func(s *Settings) *float64 { return &s.Time.FullscreenDebounce }),
 		floatKnob("Time", "MaxStep", 5, 250, 5, func(s *Settings) *float64 { return &s.Time.MaxStep }),
 		floatKnob("Time", "Scale", 0, 4, 0.05, func(s *Settings) *float64 { return &s.Time.Scale }),
+		floatKnob("Time", "TickRate", 10, 240, 5, func(s *Settings) *float64 { return &s.Time.TickRate }),
 
 		floatKnob("World", "HitBoxMargin", 0, 32, 0.5, func(s *Settings) *float64 { return &s.World.HitBoxMargin }),
 		floatKnob("World", "Speed", 0, 1, 0.005, func(s *Settings) *float64 { return &s.World.Speed }),

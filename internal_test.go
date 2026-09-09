@@ -26,7 +26,7 @@ func TestSortDrawOrder(t *testing.T) {
 	}
 }
 
-func TestDeleteRebuildsDrawOrder(t *testing.T) {
+func TestDeleteKeepsTheDrawOrdersIndices(t *testing.T) {
 	t.Parallel()
 	e := New(Config{})
 	// Z runs backwards so the sorted draw order is not the index order.
@@ -37,13 +37,25 @@ func TestDeleteRebuildsDrawOrder(t *testing.T) {
 
 	e.Delete(1)
 
-	if len(e.drawOrder) != 2 || e.drawOrder[0] != 1 || e.drawOrder[1] != 0 {
-		t.Errorf("drawOrder = %v, want [1 0]", e.drawOrder)
+	// Only the deleted entity leaves. Nothing renumbers, which is the whole
+	// point: the order used to shift every index above the hole down by one.
+	if len(e.drawOrder) != 2 || e.drawOrder[0] != 2 || e.drawOrder[1] != 0 {
+		t.Errorf("drawOrder = %v, want [2 0]", e.drawOrder)
 	}
 	for _, idx := range e.drawOrder {
-		if idx < 0 || idx >= len(e.State) {
-			t.Fatalf("drawOrder holds %d, outside 0..%d", idx, len(e.State)-1)
+		if !e.alive[idx] {
+			t.Fatalf("drawOrder holds %d, which is not a live entity", idx)
 		}
+	}
+
+	// The freed slot comes back on the next Add, and comes back into the
+	// order with it.
+	if i := e.Add(Sprite{Height: 32, State: StateVisible, Width: 32, X: 20, Z: 1}); i != 1 {
+		t.Fatalf("Add returned %d, want the freed slot 1", i)
+	}
+	e.sortDrawOrder()
+	if len(e.drawOrder) != 3 || e.drawOrder[0] != 2 || e.drawOrder[1] != 1 || e.drawOrder[2] != 0 {
+		t.Errorf("drawOrder = %v, want [2 1 0]", e.drawOrder)
 	}
 }
 

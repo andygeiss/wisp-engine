@@ -137,6 +137,13 @@ type TimeSettings struct {
 	MaxStep float64
 	// Scale multiplies every frame's elapsed time. Below 1 is slow motion.
 	Scale float64
+	// TickRate is how many times a second the simulation runs, apart from the
+	// frame rate. A higher rate costs more and reacts sooner; a lower one is
+	// cheaper and coarser.
+	//
+	// Two machines simulating one world have to agree on it, so a networked
+	// game sets it from the server rather than from a saved menu.
+	TickRate float64
 }
 
 // WorldSettings decides how entities move and touch.
@@ -194,6 +201,7 @@ func Defaults() Settings {
 			FullscreenDebounce: 500,
 			MaxStep:            50,
 			Scale:              1,
+			TickRate:           60,
 		},
 		World: WorldSettings{
 			HitBoxMargin: 6,

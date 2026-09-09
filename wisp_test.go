@@ -17,11 +17,18 @@ func newEngine(t *testing.T) *wisp.Engine {
 	// The tests step by 100 ms, which is one animation frame. The default cap
 	// is 50, so raise it rather than halve every expected distance.
 	e.Time.MaxStep = 1000
+	// One test frame is exactly one simulation tick, so a distance a test
+	// expects is one step rather than a count of them. The default rate, and
+	// the accumulator that carries a part-tick between frames, are what
+	// TestStepTick is for.
+	e.Time.TickRate = 10
 	return e
 }
 
-// entityCount returns the entity count and fails if any array disagrees.
-func entityCount(t *testing.T, e *wisp.Engine) int {
+// entitySlots returns the length of the entity arrays and fails if any of them
+// disagrees. It counts slots rather than entities: a deleted entity keeps its
+// slot for the next one, so the arrays outlast what is in them.
+func entitySlots(t *testing.T, e *wisp.Engine) int {
 	t.Helper()
 	n := len(e.State)
 	for name, got := range map[string]int{
@@ -43,8 +50,8 @@ func entityCount(t *testing.T, e *wisp.Engine) int {
 			t.Errorf("len(%s) = %d, want %d", name, got, n)
 		}
 	}
-	if got := e.Count(); got != n {
-		t.Errorf("Count() = %d, want %d", got, n)
+	if got := e.Slots(); got != n {
+		t.Errorf("Slots() = %d, want %d", got, n)
 	}
 	return n
 }
@@ -62,8 +69,11 @@ func TestAdd(t *testing.T) {
 	if a != 0 || b != 1 {
 		t.Fatalf("indices = %d, %d, want 0, 1", a, b)
 	}
-	if n := entityCount(t, e); n != 2 {
-		t.Fatalf("entities = %d, want 2", n)
+	if n := entitySlots(t, e); n != 2 {
+		t.Fatalf("slots = %d, want 2", n)
+	}
+	if got := e.Count(); got != 2 {
+		t.Fatalf("Count() = %d, want 2", got)
 	}
 	checks := []struct {
 		name string
@@ -102,17 +112,50 @@ func TestDelete(t *testing.T) {
 
 	e.Delete(1)
 
-	if n := entityCount(t, e); n != 2 {
-		t.Fatalf("entities = %d, want 2", n)
+	// This is the property the free list exists for: an index a game — or a
+	// packet — is holding still means the entity it meant before.
+	if e.X[0] != 10 || e.X[2] != 30 {
+		t.Errorf("X = %v, want 10 at index 0 and 30 at index 2: a delete moved somebody", e.X)
 	}
-	if e.X[0] != 10 || e.X[1] != 30 {
-		t.Errorf("X = %v, want [10 30]", e.X)
+	if n := entitySlots(t, e); n != 3 {
+		t.Fatalf("slots = %d, want 3: a delete keeps the slot it emptied", n)
 	}
-	if e.CamTarget != 1 {
-		t.Errorf("CamTarget = %d, want 1 (shifted down)", e.CamTarget)
+	if got := e.Count(); got != 2 {
+		t.Errorf("Count() = %d, want 2", got)
+	}
+	if e.Live(1) {
+		t.Error("slot 1 is still live after deleting it")
+	}
+	if e.State[1] != 0 || e.SpriteWidth[1] != 0 || e.SpriteHeight[1] != 0 {
+		t.Errorf("slot 1 kept state %b and a %vx%v sprite, want it emptied so the update and the draw skip it",
+			e.State[1], e.SpriteWidth[1], e.SpriteHeight[1])
+	}
+	if e.CamTarget != 2 {
+		t.Errorf("CamTarget = %d, want 2: it was not the entity that went", e.CamTarget)
 	}
 	if e.InputTarget != -1 {
 		t.Errorf("InputTarget = %d, want -1 (it was deleted)", e.InputTarget)
+	}
+
+	// A second delete does nothing, so a game holding an index does not have
+	// to remember whether it has already used it.
+	e.Delete(1)
+	if got := e.Count(); got != 2 {
+		t.Errorf("Count() = %d after deleting the same entity twice, want 2", got)
+	}
+
+	// The next Add takes the hole instead of growing past it, and takes it
+	// clean: every field is the new sprite's.
+	i := e.Add(wisp.Sprite{Height: 8, State: wisp.StateVisible, Width: 8, X: 40})
+	if i != 1 {
+		t.Errorf("Add returned %d, want the freed slot 1", i)
+	}
+	if n := entitySlots(t, e); n != 3 {
+		t.Errorf("slots = %d, want 3: the freed slot was grown past rather than reused", n)
+	}
+	if e.X[1] != 40 || e.SpriteWidth[1] != 8 || e.Alpha[1] != 1 {
+		t.Errorf("reused slot = x %v, width %v, alpha %v, want 40, 8 and 1: it kept something from the entity before",
+			e.X[1], e.SpriteWidth[1], e.Alpha[1])
 	}
 
 	e.CamTarget = 0
@@ -120,8 +163,60 @@ func TestDelete(t *testing.T) {
 	if e.CamTarget != -1 {
 		t.Errorf("CamTarget = %d, want -1 after deleting its entity", e.CamTarget)
 	}
-	if n := entityCount(t, e); n != 1 || e.X[0] != 30 {
-		t.Errorf("entities = %d, X = %v, want 1 entity at 30", n, e.X)
+}
+
+// TestID is what makes an entity nameable off this machine. An index is stable
+// but reusable; an ID survives the reuse by refusing to resolve.
+func TestID(t *testing.T) {
+	e := newEngine(t)
+	sprite := wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32}
+	a := e.Add(sprite)
+	b := e.Add(sprite)
+	idA, idB := e.IDOf(a), e.IDOf(b)
+
+	if idA == 0 || idB == 0 || idA == idB {
+		t.Fatalf("IDs = %d and %d, want two different non-zero ones", idA, idB)
+	}
+	if got := e.Index(idA); got != a {
+		t.Errorf("Index(idA) = %d, want %d", got, a)
+	}
+
+	e.Delete(a)
+	if got := e.Index(idA); got != -1 {
+		t.Errorf("Index(idA) = %d after deleting it, want -1", got)
+	}
+
+	// The slot comes back as somebody else. The old ID must not follow it.
+	c := e.Add(sprite)
+	if c != a {
+		t.Fatalf("Add returned %d, want the freed slot %d", c, a)
+	}
+	if got := e.Index(idA); got != -1 {
+		t.Errorf("Index(idA) = %d, want -1: a stale ID resolved to the entity that took its slot", got)
+	}
+	if got := e.Index(e.IDOf(c)); got != c {
+		t.Errorf("Index(IDOf(c)) = %d, want %d", got, c)
+	}
+	if got := e.Index(idB); got != b {
+		t.Errorf("Index(idB) = %d, want %d: an untouched entity lost its name", got, b)
+	}
+
+	e.Reset()
+	if got := e.Index(idB); got != -1 {
+		t.Errorf("Index(idB) = %d after Reset, want -1", got)
+	}
+	if got := e.Add(sprite); got != 0 {
+		t.Fatalf("the first entity after a Reset is at %d, want 0", got)
+	}
+	if got := e.Index(idB); got != -1 {
+		t.Errorf("Index(idB) = %d, want -1: an ID from before a Reset came back to life", got)
+	}
+
+	if got := e.IDOf(99); got != 0 {
+		t.Errorf("IDOf(99) = %d, want the zero ID for a slot that does not exist", got)
+	}
+	if got := e.Index(0); got != -1 {
+		t.Errorf("Index(0) = %d, want -1: the zero ID names nothing", got)
 	}
 }
 
@@ -184,7 +279,7 @@ func TestAddTilemap(t *testing.T) {
 			Tiles: []int{0, -1, 99, 4}, TilesetCols: 3, TilesetRows: 5, Width: 32,
 		})
 
-		if n := entityCount(t, e); n != 2 {
+		if n := entitySlots(t, e); n != 2 {
 			t.Fatalf("entities = %d, want 2", n)
 		}
 		if e.X[0] != 16 || e.Y[0] != 16 || e.ImageColumn[0] != 0 || e.ImageRow[0] != 0 {
@@ -207,7 +302,7 @@ func TestAddTilemap(t *testing.T) {
 			Cols: 3, Height: 32, Rows: 3,
 			Tiles: []int{1}, TilesetCols: 3, TilesetRows: 5, Width: 32,
 		})
-		if n := entityCount(t, e); n != 1 {
+		if n := entitySlots(t, e); n != 1 {
 			t.Errorf("entities = %d, want 1", n)
 		}
 	})
@@ -335,7 +430,8 @@ func TestStepMovement(t *testing.T) {
 	t.Parallel()
 	const attack = uint64(1 << 20)
 
-	// One 100 ms frame at speed factor 1.
+	// One tick at speed factor 1. newEngine sets the tick rate so that one
+	// 100 ms test frame buys exactly one.
 	step := func(e *wisp.Engine) float64 { return e.World.Speed * 100 }
 
 	t.Run("no entities and no target does not panic", func(t *testing.T) {
@@ -506,16 +602,26 @@ func TestStepMovement(t *testing.T) {
 			Height: 32, State: wisp.StateVisible | wisp.StateMoveRight, Width: 32, X: 100, Y: 100,
 		})
 
+		// Half speed is half the world time per frame. A tick is still a
+		// whole tick, so it takes two frames to buy one instead of moving
+		// half as far in one — the leftover is carried, not dropped.
 		e.Step(100)
+		if e.X[p] != 100 {
+			t.Errorf("x = %v, want 100: half a tick's worth of time is not a tick", e.X[p])
+		}
 
-		if e.X[p] != 100+step(e)/2 {
-			t.Errorf("x = %v, want %v at half speed", e.X[p], 100+step(e)/2)
+		e.Step(100)
+		if e.X[p] != 100+step(e) {
+			t.Errorf("x = %v, want %v after two frames at half speed", e.X[p], 100+step(e))
 		}
 	})
 
 	t.Run("the frame cap stops a background tab teleporting things", func(t *testing.T) {
 		e := newEngine(t)
 		e.Time.MaxStep = 50
+		// One capped frame buys exactly one tick, so the cap is what the
+		// distance below is measuring rather than the rounding.
+		e.Time.TickRate = 20
 		p := e.Add(wisp.Sprite{
 			Height: 32, State: wisp.StateVisible | wisp.StateMoveRight, Width: 32, X: 100, Y: 100,
 		})
@@ -524,6 +630,158 @@ func TestStepMovement(t *testing.T) {
 
 		if want := 100 + e.World.Speed*50; e.X[p] != want {
 			t.Errorf("x = %v after a ten-second frame, want %v", e.X[p], want)
+		}
+	})
+}
+
+// TestStepTick is about the accumulator: how a frame's time becomes whole
+// simulation ticks, and what happens to the part of it that does not fill one.
+// The engine used to move things by however long the frame took, which is what
+// made two machines running the same input disagree.
+func TestStepTick(t *testing.T) {
+	t.Parallel()
+
+	// ticker returns an engine whose ticks are exactly 10 ms — a round number
+	// so a count is a count and not a rounding — and the dt of every tick it
+	// runs.
+	ticker := func(t *testing.T) (*wisp.Engine, *[]float64) {
+		e := newEngine(t)
+		e.Time.TickRate = 100
+		dts := new([]float64)
+		e.Simulate = func(dt float64) { *dts = append(*dts, dt) }
+		return e, dts
+	}
+
+	t.Run("a frame shorter than a tick runs none, and the time is not lost", func(t *testing.T) {
+		e, dts := ticker(t)
+
+		e.Step(6)
+		if len(*dts) != 0 {
+			t.Fatalf("ticks = %d after 6 ms of a 10 ms tick, want 0", len(*dts))
+		}
+
+		e.Step(6)
+		if len(*dts) != 1 {
+			t.Errorf("ticks = %d after a second 6 ms frame, want 1: the leftover was dropped", len(*dts))
+		}
+	})
+
+	t.Run("a long frame runs every tick it paid for", func(t *testing.T) {
+		e, dts := ticker(t)
+
+		e.Step(50)
+
+		if len(*dts) != 5 {
+			t.Fatalf("ticks = %d for a 50 ms frame, want 5", len(*dts))
+		}
+		for i, dt := range *dts {
+			if dt != 10 {
+				t.Errorf("tick %d ran for %v ms, want 10: a tick is one fixed length", i, dt)
+			}
+		}
+	})
+
+	t.Run("uneven frames still run even ticks", func(t *testing.T) {
+		e, dts := ticker(t)
+
+		// Three frames of the shape a browser really hands over, adding to 45.
+		for _, ms := range []float64{16.7, 8.3, 20} {
+			e.Step(ms)
+		}
+
+		if len(*dts) != 4 {
+			t.Fatalf("ticks = %d over 45 ms of uneven frames, want 4", len(*dts))
+		}
+		for i, dt := range *dts {
+			if dt != 10 {
+				t.Errorf("tick %d ran for %v ms, want 10", i, dt)
+			}
+		}
+	})
+
+	t.Run("a pause runs no ticks", func(t *testing.T) {
+		e, dts := ticker(t)
+		e.Paused = true
+
+		e.Step(100)
+
+		if len(*dts) != 0 {
+			t.Errorf("ticks = %d while paused, want 0", len(*dts))
+		}
+	})
+
+	t.Run("a hit stop runs no ticks", func(t *testing.T) {
+		e, dts := ticker(t)
+		e.HitStop(50, 0)
+
+		e.Step(40)
+
+		if len(*dts) != 0 {
+			t.Errorf("ticks = %d inside a freeze, want 0", len(*dts))
+		}
+	})
+
+	t.Run("the frame cap bounds what one frame can buy", func(t *testing.T) {
+		e, dts := ticker(t)
+		e.Time.MaxStep = 50
+
+		e.Step(10000)
+
+		if len(*dts) != 5 {
+			t.Errorf("ticks = %d for a ten-second frame, want 5: the cap is what stops a sleeping tab", len(*dts))
+		}
+	})
+
+	t.Run("a tick rate of zero falls back rather than dividing by zero", func(t *testing.T) {
+		e, dts := ticker(t)
+		e.Time.TickRate = 0
+
+		e.Step(100)
+
+		if len(*dts) == 0 {
+			t.Fatal("no ticks ran at a rate of 0, want the fallback rate to carry it")
+		}
+		for i, dt := range *dts {
+			if dt != 1000.0/60 {
+				t.Errorf("tick %d ran for %v ms, want the fallback of 1000/60", i, dt)
+			}
+		}
+	})
+
+	t.Run("Tick runs the simulation on a clock that is not this frame's", func(t *testing.T) {
+		e := newEngine(t)
+		var dts []float64
+		e.Simulate = func(dt float64) { dts = append(dts, dt) }
+		p := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateVisible | wisp.StateMoveRight, Width: 32, X: 100,
+		})
+
+		// This is how a replay reaches the engine: the step comes from
+		// whoever owns the world, not from this machine's frame time.
+		e.Tick(25)
+
+		if len(dts) != 1 || dts[0] != 25 {
+			t.Errorf("Simulate saw %v, want one call of 25", dts)
+		}
+		if want := 100 + e.World.Speed*25; e.X[p] != want {
+			t.Errorf("x = %v, want %v: Tick did not move the world", e.X[p], want)
+		}
+	})
+
+	t.Run("the frame update still runs when no tick does", func(t *testing.T) {
+		e, dts := ticker(t)
+		e.Paused = true
+		frames := 0
+		e.Run(func(float64) {
+			frames++
+			e.Stop()
+		})
+
+		if frames != 1 {
+			t.Errorf("the update ran %d times while paused, want 1: a paused game still reads the keys that leave the pause", frames)
+		}
+		if len(*dts) != 0 {
+			t.Errorf("ticks = %d while paused, want 0", len(*dts))
 		}
 	})
 }

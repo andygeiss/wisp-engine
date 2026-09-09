@@ -35,13 +35,41 @@
 // # Entities
 //
 // An entity is an index into every slice at once, so a game reaches into
-// e.X[i] instead of calling a getter. [Engine.Add] appends to all of them and
-// [Engine.Delete] removes from all of them; nothing allocates once the slices
-// have grown, which is what keeps the wasm module small and the frame steady.
+// e.X[i] instead of calling a getter. [Engine.Add] fills a slot and
+// [Engine.Delete] empties one and keeps it for the next entity; nothing
+// allocates once the slices have grown, which is what keeps the wasm module
+// small and the frame steady.
+//
+// Keeping the slot is what makes an index worth holding: a delete moves
+// nothing, so an index still means the entity it meant last frame. Iterate to
+// [Engine.Slots] and skip the holes with [Engine.Live]; [Engine.Count] is how
+// many entities there are, which is a smaller number. A slot is reused
+// eventually, so an index that has to outlive a delete — one in a save, or in
+// a packet — travels as an [ID] and is resolved back with [Engine.Index].
 //
 // The engine owns state bits 0 to 13 ([StateVisible] and friends) and a game
 // adds its own above bit 15. [Engine.RowForState] maps a state to the sprite
 // sheet row that draws it, so the engine never has to know what an "attack" is.
+//
+// # Time
+//
+// A frame and a tick are not the same thing. [Engine.Run] calls the update it
+// was given once per frame, on however long the frame took: read the keys
+// there, spawn things there, draw a HUD there. The world moves in
+// [Engine.Simulate], which runs at [TimeSettings.TickRate] a second with the
+// same dt every time, so how far anything goes stops depending on how fast the
+// machine drawing it is:
+//
+//	e.Simulate = func(dt float64) {
+//		if e.Input.Down("z") {
+//			e.X[hero] += 0.2 * dt // the same distance on any display
+//		}
+//	}
+//
+// A frame pays for whole ticks and carries the remainder, so a frame may run
+// two ticks or none. Everything the player only looks at — the camera, the
+// shake, the animations — stays on the frame, because none of it has to agree
+// with anybody.
 //
 // # Platforms
 //

@@ -160,7 +160,7 @@ func (e *Engine) Stats() Stats {
 		DrawMs:      m.drawMs,
 		Drawn:       m.drawn,
 		Dropped:     m.dropped,
-		Entities:    len(e.State),
+		Entities:    e.live,
 		FrameMs:     m.frames[(m.next-1+metricsWindow)%metricsWindow],
 		GoHeapBytes: m.goHeapBytes,
 		P50Ms:       m.percentile(0.5),

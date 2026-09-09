@@ -1,8 +1,15 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 4 are built and green. 5 and 6 are not started.**
+**Status: milestones 1 to 4 are built and green. 5, 6 and 7 are not started.**
 This file is both the plan and the record — what was decided, what was built,
 what changed while building it, and what is left.
+
+**Two changes landed ahead of milestone 7**, the networked game: an entity index
+is now a name the engine keeps, and the simulation runs on a fixed tick instead
+of on however long the frame took. Both stand on their own merit and both are
+green — *Two changes networking needs* has them. Milestone 7 itself is a brief
+and nothing else, and it needs a decision about this project's job before it is
+more than that.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
 `make wasm` produces a 228 KB module, every gate is green including the two
@@ -69,6 +76,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **not started** — the design is below |
 | 6. `game-jam-template` imports the module | **not started** |
+| 7. A networked game | **not started** — a brief, below, and two of its groundwork changes already landed |
 
 Two follow-ups, each gated on evidence rather than scheduled:
 
@@ -84,11 +92,12 @@ Two follow-ups, each gated on evidence rather than scheduled:
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 47 test functions: 42 tests, four
+list against the commit and is green too. 49 test functions: 44 tests, four
 examples, and one fuzz target with its seeds.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 234,296 bytes — 229
-KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
+`make wasm` has run. `web/static/lab.wasm` is committed at 234,882 bytes — 229
+KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
+free list and the fixed tick cost 586 bytes of that between them.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
 `fullscreenAt` and `claimsKey` are reached only from `runtime_js.go`, so the
@@ -117,18 +126,18 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            140 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      307 the playground (js && wasm)
+│   ├── lab/main.go      313 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
-├── doc.go                54 the package doc
-├── engine.go            321 Engine, Config, New, Step, Impact, HitStop, Shake
-├── entity.go            215 Sprite, Tilemap, Add, Delete, BoundingBox, Reset
-├── example_test.go       72 runnable Examples for pkg.go.dev
+├── doc.go                82 the package doc
+├── engine.go            389 Engine, Config, New, Step, Tick, Impact, HitStop
+├── entity.go            314 Sprite, Tilemap, ID, Add, Delete, Slots, Live
+├── example_test.go       75 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
-├── internal_test.go     524 draw order, layering, menu widths, the frame ring
-├── knobs.go             321 the knob table, GoLiteral, the text format
+├── internal_test.go     536 draw order, layering, menu widths, the frame ring
+├── knobs.go             322 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
 ├── menu.go              358 the M overlay, canvas-drawn
@@ -138,18 +147,18 @@ wisp-engine/
 ├── README.md                install, the 30-second example, waived rules
 ├── render.go            119 Run, Stop, Rect, Text, sound, the frame's paint
 ├── runtime_js.go        464 canvas, events, audio, rAF loop (js && wasm)
-├── settings.go          203 Settings and its eight groups, Defaults
+├── settings.go          211 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
 ├── state.go             191 the state bits, movement, animation, draw order
 ├── web/
 │   ├── static/              app.css, wasm_app.js, the art, lab.wasm
 │   └── templates/index.html the host page
-└── wisp_test.go         833 the consumer's view: entities, camera, input, menu
+└── wisp_test.go        1091 the consumer's view: entities, camera, input, menu
 ```
 
-2,401 lines of engine that build anywhere, 579 behind the browser tag, 1,852 of
-tests, 537 of lab and server.
+2,720 lines of engine that build anywhere, 464 behind the browser tag, 1,946 of
+tests, 543 of lab and server.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -240,10 +249,111 @@ The transparency in that scene is not a bug and was never one: `spawn` asks for
 cent opaque on purpose. It is what made the overdraw look like a rendering
 fault rather than a layering one.
 
+## Two changes networking needs
+
+Both landed before milestone 7 was decided, because both are worth having
+whether or not it happens. Neither is network code; both are things the engine
+got wrong for a game that is only ever played by one person at one keyboard.
+
+### An entity index is now a name the engine keeps
+
+`Delete` used to call `slices.Delete` on all fourteen arrays, so every entity
+above the hole moved down one. Its own doc comment admitted the cost: *"a game
+holding indices must shift them too"*. Nobody can. An index in a variable meant
+its neighbour the moment somebody else was deleted, and an index in a packet
+could not survive the trip.
+
+`Delete` now empties the slot and keeps it, and `Add` takes it back off a free
+list. Nothing moves, so an index still means what it meant last frame.
+
+| Before | Now |
+|---|---|
+| `Count()` was `len(State)`, and *"every index below it is valid"* | `Count()` is the number of entities. `Slots()` is the range to iterate and `Live(i)` skips the holes |
+| `Delete` was O(n) in the arrays plus an O(n) `drawOrder` rebuild | O(1) in the arrays, one `slices.Index` in the draw order |
+| Deleting entity 1 renumbered entity 2 to 1 | Entity 2 is still entity 2 |
+| `CamTarget` and `InputTarget` were shifted by `shiftIndex` | Cleared to -1 when they point at the entity that went; `shiftIndex` is deleted |
+| Deleting the same entity twice deleted its neighbour | The second delete does nothing |
+
+A slot is reused, so a bare index is still not a name that outlives its entity.
+`ID` is: one `uint64` carrying the slot and the generation stamped on the entity
+that filled it, `IDOf` to get one and `Index` to resolve it back. A stale ID
+resolves to -1 rather than to the stranger that took the slot, and one counter
+for the whole engine — rather than one per slot — means an ID from before a
+`Reset` cannot come back to life either. It wraps after four billion entities,
+which is longer than a browser tab lives.
+
+The emptied slot is a 0x0 invisible entity with no state bits, which is not
+tidiness: `updateStates` skips anything with no move bits and no bit in
+`RowMask`, `advanceAnimations` skips anything not animated, and the draw skips
+anything not visible. A dead slot is already invisible to all three, so the
+holes cost no new branch in any hot loop.
+
+**The lab stopped deriving indices from a base.** It kept `first int` and
+addressed spawned sprite `n` as `first + n`, which happens to still work — the
+free list is last-in-first-out and the lab despawns in the reverse of the order
+it spawns — but only by accident of both. It now keeps the indices `Add` handed
+back in a `spawned []int`, and `first` is gone: every `e.Count() - first` was
+`len(spawned)` all along.
+
+### The simulation runs on a fixed tick
+
+`Step` moved the world by however long the frame took. Two machines with
+different displays therefore ran different simulations from the same input,
+which is the thing that makes prediction and reconciliation impossible — and
+the reason has nothing to do with networking: it is also why the same replay
+gave two answers on two laptops.
+
+`Step` is still the frame. It now spends the frame's world time on whole
+`Tick` calls of `1000/Time.TickRate` ms and carries the remainder, so a frame
+runs two ticks, or one, or none, and the average rate is exactly right.
+
+The split is the one the engine already made for the shake — simulation against
+presentation:
+
+| Runs per tick, fixed dt | Runs per frame, the frame's dt |
+|---|---|
+| `Engine.Simulate`, the game's own world | the update given to `Run`: keys, spawning, HUD |
+| `updateStates` — movement, facing, the sheet row | `updateCamera` — follow, dead zone, shake |
+| | `advanceAnimations` — frame offsets are presentation |
+| | the tuning menu, the input edges, the metrics |
+
+`Simulate` is a new field next to `RenderUI`. The update given to `Run` keeps
+its documented contract exactly: it is called every frame with the world's own
+dt, which is 0 while paused, so a paused game still reads the key that leaves
+the pause. That is why input *edges* belong there and not in `Simulate` — a
+frame can carry two ticks or none, so a `JustPressed` read inside `Simulate`
+would fire twice or not at all.
+
+`Tick(dt)` is exported for the same reason `Step` is. A test drives it
+directly; so, one day, does a replay of a tick whose input arrived from
+somewhere else.
+
+`Time.TickRate` is the 39th knob, default 60. It is in the menu because every
+field of `Settings` is, but its doc comment says what the menu cannot: two
+machines simulating one world have to agree on it, so a networked game takes it
+from the server rather than from a saved menu.
+
+**What this does not do yet, and it is visible.** There is no interpolation
+between ticks. At 60 ticks on a 60 Hz display the frame jitter means the
+occasional frame runs two ticks or none, which is a one-tick pop — about two
+pixels at the default speed, and pixel-art snapping hides most of it. On a 144
+Hz display it is a third of the frames. The fix is a previous position per
+entity and a lerp in the draw, which is 16 bytes an entity and a change to the
+one hot loop in `runtime_js.go`; it is not done, and the lab's own bounce is
+still in the per-frame update rather than in `Simulate` because moving it there
+before interpolation exists would put the judder into the showcase.
+
+**The ramp number needs re-reading.** `updateStates` moved from every frame to
+every tick, so the per-frame cost changed. It should not have changed much —
+the spawned sprites carry no move bits and no `RowMask` bits, so that loop was
+already skipping them, and `advanceAnimations`, the pass that does touch all of
+them, is still per frame. But 34,476 was measured against the old shape and is
+now a number about a build that no longer exists.
+
 ## `Settings` — the point of the project
 
 Eight groups, alphabetical, every field a number or a bool so one menu can edit
-all of them. **38 knobs across 11 nesting levels**, because `Feel` holds four
+all of them. **39 knobs across 11 nesting levels**, because `Feel` holds four
 sub-structs of its own.
 
 ```go
@@ -604,9 +714,162 @@ Six things are **not** mechanical:
 - **`stateAction1` and friends start at bit 16.** Confirm the engine still claims
   only bits 0 to 13, so the game's bits stay free.
 
-Parking lot, and the engine's `Delete` doc comment says so: `main.go` addresses
-the player as entity 0 throughout, so deleting any entity below it would silently
-repoint it.
+No longer a parking lot: `main.go` addresses the player as entity 0 throughout,
+which used to mean deleting any entity below it silently repointed it. A delete
+moves nothing now, so entity 0 stays entity 0 — see *Two changes networking
+needs*. Worth checking the template for the opposite assumption instead: code
+that iterates `for i := range e.State` now has to skip the holes with
+`e.Live(i)`, and code that reads `e.Count()` as the iteration bound wants
+`e.Slots()`.
+
+## Networking — milestone 7, not started
+
+A brief, and the measurements behind it. No code, and none until the first
+question below is answered, because it is not a question about netcode.
+
+### The brief
+
+- **Job:** Two people play the same Wisp game in two browsers and see one
+  world, with the server deciding what actually happened.
+- **Why:** A game built on this engine today is one person at one keyboard.
+  Making it two meant writing the netcode inside the game, where it could not
+  reach the simulation it has to predict — and until the fixed tick landed, the
+  simulation was not reproducible enough to predict at all. The two are the same
+  problem: the engine owned the world and gave nobody else a way to agree with
+  it.
+- **Guardrails:**
+  - Zero third-party dependencies, as everywhere else. That is what picks the
+    transport rather than taste — see the table below.
+  - `go list -deps .` on the root package keeps showing only the standard
+    library. Netcode lives in subpackages the root does not import, and the
+    server is a third `cmd/`, not a second root.
+  - The client half compiles under TinyGo and stays inside the 320,000-byte
+    gate. A probe put a `syscall/js` WebSocket with binary framing at 6.6 KB;
+    treat 10 KB as the ceiling and fail the target above it, the way
+    `WASM_MAX_BYTES` already fails.
+  - The server never compiles under TinyGo and never imports the renderer.
+  - `Settings` splits in two on the wire. `Feel`, `Camera`, `Render`, `Audio`
+    and `Debug` are presentation and stay client-local and freely tunable.
+    `World.Speed`, `World.HitBoxMargin` and `Time.TickRate` decide what happens
+    and come from the server. Getting this wrong turns the engine's headline
+    feature into a cheat menu.
+  - The lab's measured path is not to be changed without re-measuring `B` and
+    writing the new number down.
+  - `game-jam-template` is not touched by this milestone.
+- **Done means:**
+  - Two browsers on one machine move each other's sprite, and the server is
+    what decides where they are.
+  - `go list -deps .` on the root package still shows only the standard library.
+  - `make check`, `make ci` and `make wasm` are green, and the module is under
+    the byte gate.
+  - The RFC 6455 framing has its own tests: a masked frame, a fragmented
+    message, a close handshake, and a frame that claims a length it does not
+    have.
+  - `SPEC.md` says this is part of the job, and anything this waives is in the
+    README in the six-field form.
+
+### The SPEC delta this asks for
+
+`SPEC.md` is the project's own four fields, and this brief is a delta against
+it — but a delta the current *Job* sentence does not cover, which is why it is
+a decision and not a task. Concretely, three edits:
+
+**Job** — one sentence becomes two, and the second is the new one:
+
+> A solo developer tunes a 2D pixel-art browser game's feel in the browser, sees
+> what it costs, and pastes the tuned numbers back into their own source.
+> **When the game is for more than one person, the same engine runs on a server
+> and decides what happened.**
+
+**Guardrails** — three lines added, none of them replacing anything:
+
+> - **The root package imports only the standard library, and only the standard
+>   library.** `go list -deps .` is the check. The networking packages are
+>   subpackages the root does not import, so a game that does not need them does
+>   not pay for them.
+> - **The transport is WebSocket, and that is a consequence rather than a
+>   choice.** A browser has no UDP; WebRTC and WebTransport both need a
+>   dependency or a server the standard library cannot be, so the dependency
+>   rule picks this one. It is TCP, so the engine promises a 15-to-30 Hz
+>   authoritative game and not a 60 Hz twitch shooter.
+> - **`Settings` splits on the wire.** Presentation stays client-local and
+>   tunable; `World` and `Time.TickRate` come from the server. The tuning menu
+>   must not become a cheat menu.
+
+**Done means** — one line added:
+
+> - Two browsers on one machine move each other's sprite, the server decides
+>   where they are, and `go list -deps .` still shows only the standard library.
+
+Nothing in the current *Guardrails* or *Done means* has to go. The TinyGo rule,
+the canvas-UI rule and the dependency rule all survive this milestone unchanged
+— which is a good sign that it belongs here rather than in a second module.
+
+### What the browser allows, measured rather than remembered
+
+There is no UDP in a browser and no raw socket, so this is a choice between
+three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
+`wasm-opt -Oz`:
+
+| Option | Cost | Verdict |
+|---|---|---|
+| **WebSocket through `syscall/js`** | 46,839 bytes against 40,232 for an empty module — **6.6 KB** | What we can afford, and the only one that keeps the dependency rule |
+| `net/http` in the client | 2,895,075 bytes before `wasm-opt` — nine times the whole gate | Out on size, and `fetch`-shaped anyway |
+| WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
+| WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
+
+The engine's own numbers for scale: `web/static/lab.wasm` is 234,882 bytes
+against a 320,000 gate, so 85,118 bytes of headroom and the client half wants
+about 8% of it.
+
+**The consequence to write down, not to discover.** WebSocket is TCP, so one
+lost packet stalls everything queued behind it. That buys a good 15 to 30 Hz
+server-authoritative game and not a 60 Hz twitch shooter. For 2D pixel art it is
+the right trade; it should be a promise the engine makes rather than something a
+player finds.
+
+The server side has no standard-library WebSocket either, but it does not need
+one: RFC 6455 is a `sha1` and a `base64` for the handshake, `http.Hijacker` for
+the connection, and a frame header of at most fourteen bytes. It is the same
+move as the hand-written sheet scanner in *Aseprite sheets*, for the same
+reason, and it costs the wasm module nothing because it never goes near it.
+
+### Shape
+
+```
+wisp-engine/
+├── net/          the wire format, imported by both halves. No syscall/js,
+│                 no net/http: encoding only, so it tests on the host.
+├── net/ws/       RFC 6455 framing. Server-side; the browser has its own.
+├── net/client/   the syscall/js half (js && wasm)
+└── cmd/gameserver/  the authoritative loop: one Engine, Tick on a ticker
+```
+
+The server runs the same `Engine`, on the same `Tick`, with `Simulate` set to
+the same function — which is the whole point of the two changes that landed. It
+holds no canvas, because `host.go` is already the headless twin and already
+compiles everywhere.
+
+### The decisions this brief does not settle
+
+1. **Does the engine's job change, or does this become a second module?**
+   `SPEC.md` says the job is tuning a game's feel in the browser. Networking is
+   not a delta against that sentence, it is a different sentence, and the
+   baseline calls a second binary and a first external system a change of
+   shape. The recommendation is subpackages here and a widened job, because
+   client prediction has to snapshot and restore the entity store — a separate
+   module would need the engine to export those hooks anyway, which is the
+   coupling without the benefit. **This one has to be answered before any code.**
+2. **Server-authoritative with client prediction, or deterministic lockstep?**
+   Recommend authoritative: lockstep needs bit-identical floats across two
+   browsers, which `math.Sqrt` and `math.Exp` do not promise.
+3. **What tick rate goes on the wire?** Recommend 30, and let the client keep
+   rendering at its own frame rate. Needs the interpolation above first.
+4. **`randFloat` is still the unseeded global `math/rand/v2`.** `random.go`
+   already says it is one function so *"a build that needs a seeded one has one
+   place to change"*. Two machines cannot agree until it is seeded per match —
+   and the shake has to stay outside that stream, because presentation must not
+   be able to desync a simulation.
 
 ## What this does not do
 
@@ -614,6 +877,13 @@ repoint it.
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second
   platform layer. A follow-up, and a large one.
 - **No WebGL2 renderer.** A follow-up, gated on the number `B` produces.
+- **No interpolation between ticks.** The simulation is fixed-rate and the draw
+  reads the current position, so a frame that runs two ticks or none shows a
+  one-tick pop — about two pixels at the default speed. It wants a previous
+  position per entity and a lerp in the draw. Until it exists the lab's own
+  bounce stays in the per-frame update, so the showcase does not judder.
+- **No networking.** Milestone 7 is a brief and two pieces of groundwork. The
+  transport is decided by the dependency rule and measured; nothing is written.
 - **No particles, tweens, tint, rotation or squash-and-stretch.** None of them
   are representable — `drawImage` is called with source size equal to destination
   size and there are no scale, rotation or tint arrays. They arrive with the

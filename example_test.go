@@ -37,19 +37,22 @@ func ExampleEngine_Impact() {
 	// Output: true true
 }
 
-// Step advances the world by one frame. A hit stop holds it, so a game that
-// moves things by dt stops for free.
+// Step advances the world by one frame, spending the frame's time on whole
+// simulation ticks. A hit stop holds the world, so a game that moves things by
+// dt stops for free.
 func ExampleEngine_Step() {
 	e := wisp.New(wisp.Config{})
 	i := e.Add(wisp.Sprite{
 		Height: 32, State: wisp.StateVisible | wisp.StateMoveRight, Width: 32,
 	})
 
-	e.Step(16)
+	// A tick is 1000/TickRate ms — 16.6 at the default 60 — so a 20 ms frame
+	// pays for one and carries the remainder into the next.
+	e.Step(20)
 	moved := e.X[i]
 
 	e.Impact(e.Feel.Heavy)
-	e.Step(16)
+	e.Step(20)
 
 	fmt.Println(moved > 0, e.X[i] == moved)
 	// Output: true true
