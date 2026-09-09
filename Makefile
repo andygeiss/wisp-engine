@@ -64,7 +64,7 @@ run:
 # it on PATH. Each source becomes a packed sheet and the JSON that describes
 # it, which is what the engine reads instead of guessing a grid.
 sheets:
-	for f in assets/*.aseprite; do n=$$(basename "$$f" .aseprite); $(ASEPRITE) -b "$$f" --sheet cmd/serve/web/static/img/$$n.png --sheet-type packed --shape-padding 1 --data cmd/serve/web/static/img/$$n.json --format json-array --list-tags || exit 1; done
+	for f in assets/*.aseprite; do n=$$(basename "$$f" .aseprite); $(ASEPRITE) -b "$$f" --sheet web/static/img/$$n.png --sheet-type packed --shape-padding 1 --data web/static/img/$$n.json --format json-array --list-tags || exit 1; done
 
 # The inner loop.
 test:
@@ -76,7 +76,8 @@ test:
 # one cmd/serve serves, and it is committed so a fresh clone runs. The size
 # check is last, because 309 KB is the claim this engine makes.
 wasm:
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" cmd/serve/web/static/js/wasm_exec.js
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" web/static/js/wasm_exec.js
 	mkdir -p bin
 	tinygo build -target wasm -opt=z -o bin/lab.wasm ./cmd/lab
-	wasm-opt -Oz --strip-debug --strip-producers -o cmd/serve/web/static/lab.wasm bin/lab.wasm
+	wasm-opt -Oz --strip-debug --strip-producers -o web/static/lab.wasm bin/lab.wasm
+	s=$$(wc -c < web/static/lab.wasm | tr -d " "); test "$$s" -le $(WASM_MAX_BYTES) || (echo "lab.wasm is $$s bytes, over the $(WASM_MAX_BYTES) the README claims" && exit 1)
