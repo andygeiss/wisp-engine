@@ -158,9 +158,12 @@ func (w *world) Tick() {
 		c.player.Tick(w.step)
 	}
 
+	// The snapshot ends a tick's batch: a client applies messages up to and
+	// including one, so everything the tick has to say — including the
+	// player's own You — goes ahead of it.
 	snapshot := w.snapshot(tick)
 	for _, c := range w.clients {
-		c.send(snapshot, wire.Append(nil, wire.You{Tick: tick, Cooldowns: c.cooldowns()}))
+		c.send(wire.Append(nil, wire.You{Tick: tick, Cooldowns: c.cooldowns()}), snapshot)
 	}
 }
 

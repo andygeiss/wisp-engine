@@ -1,9 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
 **Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 to
-5 of 9 are built — the three engine hooks, the wire, the socket, the lab's
-rules and the server — and so is the hit-box half of step 0; the other half
-of step 0, looking at the blend, is still open.** This file is both the plan and the record — what was decided, what was
+6 of 9 are built — the three engine hooks, the wire, the socket, the lab's
+rules, the server and the replica — and so is the hit-box half of step 0; the
+other half of step 0, looking at the blend, is still open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -104,7 +104,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — steps 1 to 5 of 9 are built, the three engine hooks, the wire, the socket, the lab's rules and the server, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — steps 1 to 6 of 9 are built, the three engine hooks, the wire, the socket, the lab's rules, the server and the replica, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -204,7 +204,7 @@ wisp-engine/
 │   ├── serve/main.go        112 the wiring: config, world, server, shutdown
 │   ├── serve/main_test.go   183 headers, caching, the version, traversal
 │   ├── serve/pages.go       181 the page and the tree, the static half
-│   ├── serve/world.go       289 the tick: joins, intents, skills, the snapshot
+│   ├── serve/world.go       292 the tick: joins, intents, skills, the snapshot
 │   └── serve/world_test.go  582 two players over net.Pipe, in a synctest bubble
 ├── DESIGN.md                the page's tokens
 ├── doc.go               111 the package doc
@@ -218,7 +218,9 @@ wisp-engine/
 ├── internal/
 │   ├── lab/lab.go         382 the rules both halves share: skills, bouncers, the floor
 │   ├── lab/lab_test.go    247 the cooldown gate, the strike, the cap, the dash, the bounce
-│   ├── wire/wire.go       416 the ten messages and their bytes
+│   ├── replica/replica.go 218 the server's world in an engine: slots, queue, the depth rule
+│   ├── replica/replica_test.go 289 apply, hold, fast-forward, catch-up, order, the blend's pair
+│   ├── wire/wire.go       421 the ten messages and their bytes
 │   ├── wire/wire_test.go  197 round trips, the four refusals, the fuzz target
 │   ├── ws/frame_test.go    64 the RFC's key, and the fuzz target over the reader
 │   ├── ws/ws.go           511 RFC 6455: Accept, Dial, frames, close, ping
@@ -248,8 +250,8 @@ wisp-engine/
 ```
 
 3,792 lines of engine that build anywhere, 491 behind the browser tag and
-3,019 of tests; 1,180 of lab and server with 857 of tests; 1,309 under
-`internal/` with 1,029 of tests. The counts in that listing are hand-written and
+3,019 of tests; 1,183 of lab and server with 857 of tests; 1,532 under
+`internal/` with 1,318 of tests. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
 were put back, and is what to run rather than trust them.
@@ -1573,6 +1575,30 @@ build that does not yet talk to anybody.
   no channel — the callbacks run on the frame loop's goroutine, the same way
   the key events already do.
 
+**The replica is built.** `internal/replica` is one type: an engine, a map
+from the server's slot to the engine's index, a queue of messages in arrival
+order, and `Tick`, which a client hands to the engine as its `Simulate`. Two
+things were decided while writing it. **A server tick's batch ends with its
+Snapshot**, and the server sends everything else the tick has to say — the
+`You` included — ahead of it, so "apply up to and including the next
+snapshot" applies the whole tick; the `You` used to trail the snapshot and
+the cooldown bars would have run a tick behind. And **a Pong is not the
+world's**: `Push` drops it, because the client has to time it with its own
+clock the moment it arrives, and the replica has no clock. Otherwise it is
+the depth rule as written — one snapshot a tick, nothing when there is
+nothing (`Held` counts it, but only once a first snapshot has been applied,
+because before that it is loading), two when more than two are waiting
+(`FastForwards`), all of them past sixty-four (`CatchUps`) — plus three
+details the tests pin: a Spawn for a slot the client already knows replaces
+the old entity, so a slot the server reuses never answers to two; an actor
+in a snapshot nobody spawned is ignored rather than added; and a row that
+changed resets the frame the way `Play` does while a row that did not keeps
+it, so the animation stays the client's to time. `OnEvent` is a callback
+rather than a list, because a frame may run two ticks or none and a list
+read once a frame would drop the first tick's events. Twelve tests, one of
+them the pair: two snapshots on two ticks, and `DrawPos` half a tick later is
+exactly halfway between them.
+
 ### Security headers
 
 The policy does not change. `default-src 'self'` is the fallback for
@@ -1629,7 +1655,7 @@ Each step is green on its own and is its own commit.
 5. **`cmd/serve`**: `config.go`, `slog`, the hub, `world.Tick`, `/ws`,
    shutdown, and the `-race` tests over `net.Pipe` — **done**.
 6. **`internal/replica`**: the slot map, the ordered queue, hold, fast-forward
-   and catch-up, each with a test.
+   and catch-up, each with a test — **done**.
 7. **`cmd/lab`**: network mode, the HUD, the net line, `?solo`; `make wasm`;
    the sizes written into *Gates*.
 8. **README, SPEC and Makefile**: the waivers and notes above, the run

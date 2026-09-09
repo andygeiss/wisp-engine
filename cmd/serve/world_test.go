@@ -160,7 +160,7 @@ func (p *player) closed(t *testing.T) uint16 {
 }
 
 // frame reads one tick's worth of messages: everything up to and including
-// the You that ends a tick's batch.
+// the Snapshot that ends a tick's batch.
 func frame(t *testing.T, p *player) []wire.Message {
 	t.Helper()
 	var msgs []wire.Message
@@ -168,7 +168,7 @@ func frame(t *testing.T, p *player) []wire.Message {
 		select {
 		case m := <-p.in:
 			msgs = append(msgs, m)
-			if _, ok := m.(wire.You); ok {
+			if _, ok := m.(wire.Snapshot); ok {
 				return msgs
 			}
 			continue
@@ -177,7 +177,7 @@ func frame(t *testing.T, p *player) []wire.Message {
 		select {
 		case m := <-p.in:
 			msgs = append(msgs, m)
-			if _, ok := m.(wire.You); ok {
+			if _, ok := m.(wire.Snapshot); ok {
 				return msgs
 			}
 		case <-p.done:

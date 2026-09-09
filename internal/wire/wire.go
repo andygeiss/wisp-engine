@@ -13,6 +13,11 @@
 // a finite number, a count always matches the bytes that follow it, and a
 // message is exactly as long as its kind says. Anything else is one of the
 // four errors, never a panic.
+//
+// A server tick's messages end with its [Snapshot]. Everything the tick has
+// to say — a Spawn, a Despawn, an Event, the player's own You — is sent ahead
+// of it, so a client that applies messages up to and including the next
+// snapshot has applied the whole tick.
 package wire
 
 import (
