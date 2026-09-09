@@ -534,3 +534,160 @@ func TestSortAndDrawAreTimedApart(t *testing.T) {
 		t.Error("drawMs was never recorded by a frame")
 	}
 }
+
+// frameAt and srcRect are how a Sheet reaches the draw, and neither is
+// reachable from a consumer: Engine.Play writes a row and the browser draws
+// it, so the mapping in between has no public name. It is tested here.
+
+func TestFrameAtWalksEachDirection(t *testing.T) {
+	t.Parallel()
+
+	tag := func(d Direction) Tag { return Tag{Direction: d, From: 10, To: 13} }
+
+	tests := []struct {
+		name string
+		tag  Tag
+		n    int
+		want []int
+	}{
+		{"forward", tag(Forward), 4, []int{10, 11, 12, 13}},
+		{"reverse", tag(Reverse), 4, []int{13, 12, 11, 10}},
+		// Six steps, not eight: a ping-pong does not show either end twice, so
+		// the way back is the two frames between the ends.
+		{"pingpong", tag(PingPong), 4, []int{10, 11, 12, 13, 12, 11}},
+		{"one frame forward", Tag{Direction: Forward, From: 7, To: 7}, 1, []int{7, 7, 7}},
+		{"one frame reverse", Tag{Direction: Reverse, From: 7, To: 7}, 1, []int{7, 7, 7}},
+		{"one frame pingpong", Tag{Direction: PingPong, From: 7, To: 7}, 1, []int{7, 7, 7}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for offset, want := range tc.want {
+				if got := frameAt(tc.tag, tc.n, offset); got != want {
+					t.Errorf("frameAt(offset %d) = %d, want %d", offset, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestFrameAtStaysInTheTag is what says an offset can never address a frame
+// belonging to somebody else, however far past the end of its cycle it runs.
+func TestFrameAtStaysInTheTag(t *testing.T) {
+	t.Parallel()
+
+	for _, d := range []Direction{Forward, Reverse, PingPong} {
+		tg := Tag{Direction: d, From: 4, To: 9}
+		for offset := range 100 {
+			if got := frameAt(tg, 6, offset); got < tg.From || got > tg.To {
+				t.Fatalf("direction %v, offset %d: frame %d is outside %d..%d",
+					d, offset, got, tg.From, tg.To)
+			}
+		}
+	}
+}
+
+func TestSrcRectUsesTheGridWithoutASheet(t *testing.T) {
+	t.Parallel()
+
+	e := New(Config{})
+	i := e.Add(Sprite{Column: 2, Height: 16, Row: 3, Width: 8})
+	e.FrameOffset[i] = 1
+
+	x, y, w, h := e.srcRect(i)
+	if x != 24 || y != 48 || w != 8 || h != 16 {
+		t.Errorf("srcRect = %v,%v %vx%v, want 24,48 8x16", x, y, w, h)
+	}
+}
+
+func TestSrcRectUsesTheSheetWhenThereIsOne(t *testing.T) {
+	t.Parallel()
+
+	e := New(Config{})
+	e.Sheets = []Sheet{GridSheet(4, 2, 8, 16, 100)}
+	i := e.Add(Sprite{Height: 16, Row: 1, Width: 8})
+	e.FrameOffset[i] = 2
+
+	// Row 1 is the second tag, frames 4..7; offset 2 is frame 6, which the
+	// grid puts at column 2 of the second row.
+	x, y, w, h := e.srcRect(i)
+	if x != 16 || y != 16 || w != 8 || h != 16 {
+		t.Errorf("srcRect = %v,%v %vx%v, want 16,16 8x16", x, y, w, h)
+	}
+}
+
+// TestSrcRectFallsBackWhenTheRowIsNotATag keeps a game that sets a row the
+// sheet has no tag for drawing something rather than panicking.
+func TestSrcRectFallsBackWhenTheRowIsNotATag(t *testing.T) {
+	t.Parallel()
+
+	e := New(Config{})
+	e.Sheets = []Sheet{GridSheet(4, 2, 8, 16, 100)}
+	i := e.Add(Sprite{Height: 16, Row: 9, Width: 8})
+
+	x, y, w, h := e.srcRect(i)
+	if x != 0 || y != 144 || w != 8 || h != 16 {
+		t.Errorf("srcRect = %v,%v %vx%v, want the grid's 0,144 8x16", x, y, w, h)
+	}
+}
+
+// TestGridSheetDrawsWhatNoSheetDraws is the claim cmd/lab now rests on: it
+// attaches a Sheet built by GridSheet, and its sprites must not move a pixel.
+//
+// TestGridSheetMatchesTheExport says the parsed export and the built grid are
+// the same Sheet. This says the same Sheet and no Sheet at all are the same
+// pixels — the other half, and the half the draw loop actually asks for.
+func TestGridSheetDrawsWhatNoSheetDraws(t *testing.T) {
+	t.Parallel()
+
+	// The lab's own sheet: eight frames of 32 px across twelve animations.
+	const cols, rows, size = 8, 12, 32.0
+
+	bare := New(Config{})
+	sheeted := New(Config{})
+	sheeted.Sheets = []Sheet{GridSheet(cols, rows, size, size, 100)}
+
+	for row := range rows {
+		i := bare.Add(Sprite{Height: size, Row: row, Width: size})
+		j := sheeted.Add(Sprite{Height: size, Row: row, Width: size})
+		for offset := range cols {
+			bare.FrameOffset[i], sheeted.FrameOffset[j] = offset, offset
+
+			x1, y1, w1, h1 := bare.srcRect(i)
+			x2, y2, w2, h2 := sheeted.srcRect(j)
+			if x1 != x2 || y1 != y2 || w1 != w2 || h1 != h2 {
+				t.Fatalf("row %d frame %d: grid draws %v,%v %vx%v but the sheet draws %v,%v %vx%v",
+					row, offset, x1, y1, w1, h1, x2, y2, w2, h2)
+			}
+		}
+	}
+}
+
+// TestGridSheetTimesFramesLikeNoSheet is the same claim for the clock: a grid
+// sheet whose durations match AnimationSettings has to advance on the same
+// frames, or the lab's animation would change speed for nobody's benefit.
+func TestGridSheetTimesFramesLikeNoSheet(t *testing.T) {
+	t.Parallel()
+
+	const cols, rows, size = 8, 12, 32.0
+
+	bare := New(Config{})
+	sheeted := New(Config{})
+	sheeted.Sheets = []Sheet{GridSheet(cols, rows, size, size, bare.Animation.FrameDuration)}
+	if bare.Animation.FrameCount != cols {
+		t.Fatalf("the default FrameCount is %d, so this test is comparing two different grids", bare.Animation.FrameCount)
+	}
+
+	state := StateAnimated | StateAnimatedLoop | StateVisible
+	i := bare.Add(Sprite{Height: size, State: state, Width: size})
+	j := sheeted.Add(Sprite{Height: size, State: state, Width: size})
+
+	for step := range 40 {
+		bare.Step(37) // Not a whole frame, so the two accumulate alike.
+		sheeted.Step(37)
+		if bare.FrameOffset[i] != sheeted.FrameOffset[j] {
+			t.Fatalf("step %d: grid is on frame %d, the sheet on %d",
+				step, bare.FrameOffset[i], sheeted.FrameOffset[j])
+		}
+	}
+}

@@ -366,16 +366,17 @@ func (r *backend) pass(e *Engine, screenSpace bool) {
 			dstX, dstY = math.Round(dstX), math.Round(dstY)
 		}
 
-		// The column picks the sprite and the frame offset picks the frame, so
-		// one sheet holds every animation of every sprite.
-		srcX := float64(e.ImageColumn[i]+e.FrameOffset[i]) * w
-		srcY := float64(e.ImageRow[i]) * h
+		// Where this frame sits on the image: grid arithmetic, or the
+		// rectangle the entity's Sheet gives. The destination stays the
+		// entity's own size, so a sheet with differently sized frames scales
+		// instead of clipping.
+		srcX, srcY, srcW, srcH := e.srcRect(i)
 
 		if e.Alpha[i] != alpha {
 			alpha = e.Alpha[i]
 			r.ctx.Set("globalAlpha", alpha)
 		}
-		r.ctx.Call("drawImage", img, srcX, srcY, w, h, dstX, dstY, w, h)
+		r.ctx.Call("drawImage", img, srcX, srcY, srcW, srcH, dstX, dstY, w, h)
 		r.drawn++
 	}
 	if alpha != 1.0 {

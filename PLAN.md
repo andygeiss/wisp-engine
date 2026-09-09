@@ -1,6 +1,6 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 4 are built and green. 5, 6 and 7 are not started.**
+**Status: milestones 1 to 5 are built and green. 6 and 7 are not started.**
 This file is both the plan and the record — what was decided, what was built,
 what changed while building it, and what is left.
 
@@ -74,7 +74,7 @@ open and press keys in.
 | 2. Something to open: `cmd/lab`, `cmd/serve`, the host page | **done** |
 | 3. `Settings` and the `M` menu | **done** |
 | 4. The metrics overlay and the sprite spawner | **done** |
-| 5. Aseprite sheets | **not started** — the design is below |
+| 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **not started** |
 | 7. A networked game | **not started** — a brief, below, and two of its groundwork changes already landed |
 
@@ -92,12 +92,16 @@ Two follow-ups, each gated on evidence rather than scheduled:
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 49 test functions: 44 tests, four
-examples, and one fuzz target with its seeds.
+list against the commit and is green too. 65 test functions: 58 tests, five
+examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
+run for 45 seconds — 10.9 million executions, no crash and no sheet that
+violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 234,882 bytes — 229
+`make wasm` has run. `web/static/lab.wasm` is committed at 237,497 bytes — 232
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
-free list and the fixed tick cost 586 bytes of that between them.
+free list and the fixed tick cost 586 bytes of that between them, and the sheet
+2,615 more. `ParseSheet` is not among those 2,615: the lab builds its sheet with
+`GridSheet`, so the scanner is dead code the linker drops.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
 `fullscreenAt` and `claimsKey` are reached only from `runtime_js.go`, so the
@@ -126,17 +130,17 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            140 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      313 the playground (js && wasm)
+│   ├── lab/main.go      346 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
-├── doc.go                82 the package doc
-├── engine.go            389 Engine, Config, New, Step, Tick, Impact, HitStop
+├── doc.go               102 the package doc
+├── engine.go            398 Engine, Config, New, Step, Tick, Impact, HitStop
 ├── entity.go            314 Sprite, Tilemap, ID, Add, Delete, Slots, Live
 ├── example_test.go       75 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
-├── internal_test.go     536 draw order, layering, menu widths, the frame ring
+├── internal_test.go     693 draw order, layering, frame mapping, source rects
 ├── knobs.go             322 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
@@ -146,19 +150,22 @@ wisp-engine/
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
 ├── render.go            119 Run, Stop, Rect, Text, sound, the frame's paint
-├── runtime_js.go        464 canvas, events, audio, rAF loop (js && wasm)
+├── runtime_js.go        465 canvas, events, audio, rAF loop (js && wasm)
 ├── settings.go          211 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
+├── sheet.go             263 Sheet, Frame, Tag, GridSheet, Play, the frame map
+├── sheet_json.go        585 the hand-written Aseprite scanner and its limits
+├── sheet_test.go        501 the export, the grid equivalence, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
-├── state.go             191 the state bits, movement, animation, draw order
+├── state.go             197 the state bits, movement, animation, draw order
 ├── web/
-│   ├── static/              app.css, wasm_app.js, the art, lab.wasm
+│   ├── static/              app.css, wasm_app.js, the art, lab.wasm, lab.json
 │   └── templates/index.html the host page
 └── wisp_test.go        1091 the consumer's view: entities, camera, input, menu
 ```
 
-2,720 lines of engine that build anywhere, 464 behind the browser tag, 1,946 of
-tests, 543 of lab and server.
+3,603 lines of engine that build anywhere, 465 behind the browser tag, 2,572 of
+tests, 576 of lab and server.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -558,48 +565,182 @@ around half a million comparisons, none of which is Canvas2D. The overlay's
 not been taken yet**, and it is the one that would say whether a renderer swap
 could reach the cost at all.
 
-## Aseprite sheets — milestone 5, not started
+## Aseprite sheets — milestone 5, done
 
-Today every animation must be exactly 8 frames of exactly 100 ms in its own row.
+Every animation used to be exactly 8 frames of exactly 100 ms in its own row.
 Aseprite's own export carries named tags, real frame counts and a duration per
-frame. `make sheet` already exists; the parser does not.
+frame, and now the engine reads it.
 
 ```sh
 aseprite -b assets/lab.aseprite \
-  --sheet web/static/img/lab.png --sheet-type rows \
+  --sheet web/static/img/lab.png --sheet-type rows --sheet-width 256 \
   --data web/static/img/lab.json --format json-array --list-tags
 ```
 
-The engine parses that into a `Sheet` of `Frame`s (rect plus duration) and `Tag`s
-(name, from, to, direction — forward, reverse or ping-pong), and a game says
-`e.Play(i, "walk")`. The old grid convention keeps working, because
-`GridSheet(cols, rows, w, h, ms)` builds the same `Sheet` — one code path, two
-ways in, so `game-jam-template` does not break. That equivalence is a pure host
-test and is the backwards-compatibility proof.
+`ParseSheet` turns that into a `Sheet` of `Frame`s (rect plus duration) and
+`Tag`s (name, from, to, direction), a game says `e.Play(i, "walk")`, and
+`GridSheet(cols, rows, w, h, ms)` builds the old convention as the same
+`Sheet`. One code path, two ways in.
 
-**How to parse it — settled: a hand-written scanner.** TinyGo's own compatibility
-guide names `encoding/json` as partially supported because it leans on
-reflection, and recommends manual serialisation instead. Reported wasm cost is
-around 119 KB for a reflective JSON path against about 27 KB without one — a 30
-to 40 per cent regression on a 309 KB budget, to read six field names. Worse, the
-failure mode is a runtime `reflect` panic in the browser with a green
-`make check`. The scanner is about 250 lines, understands only
-`frames[].frame.{x,y,w,h}`, `frames[].duration`, `meta.size.{w,h}` and
-`meta.frameTags[].{name,from,to,direction}`, and skips every other value without
-interpreting it — which is also what makes it survive Aseprite adding fields.
+**Aseprite was installed all along.** This file said it was not, and the design
+above it planned around that: ship a placeholder fixture and have the test
+`t.Skip`. It is at `/Applications/Aseprite.app/Contents/MacOS/aseprite` — a
+macOS bundle, so it is not on `PATH` and `which aseprite` says nothing, which
+is presumably how the claim got written down. The fixture is a real export.
 
-Limits, all checked and all fuzz targets: input at most 4 MiB, depth at most 64,
+### `make sheets` was overwriting the art with something unreadable
+
+The recipe passed `--sheet-type packed --shape-padding 1`. The committed
+`lab.png` is a 256x384 grid — 8 columns of 12 rows — and the packed export is
+3072x32, one long strip. Running the project's own documented command replaced
+the art with a layout the engine could not read, and nothing noticed, because
+nothing runs `make sheets` in a gate and the result is a PNG.
+
+This file documented a third variant again, `--sheet-type rows` with no width,
+which is the same 3072x32 strip.
+
+The fix is `--sheet-type rows --sheet-width 256`, and the width is derived in
+the Makefile from `SHEET_COLUMNS` and `SHEET_TILE` rather than typed, so the
+grid the exporter is told about is the grid the engine believes in.
+`--sheet-columns 8` would say it directly and is what the Aseprite manual
+documents; this build ignores it, which the comment records so nobody tries it
+again.
+
+**The two assets are different kinds of thing and now get a line each.**
+`lab.aseprite` is 96 frames of animation. `tiles.aseprite` is a single 96x160
+frame that a tilemap indexes with its own rows and columns — no animation at
+all, and a row width would only pad it out to a grid it is not. The old loop
+treated them the same.
+
+Both PNGs were regenerated and **decode to identical pixels**, which is the
+check that says the pipeline is fixed rather than merely different. The files
+differ in their PNG encoding only.
+
+### One code path, two ways in
+
+`GridSheet` is not a compatibility shim bolted to the side. It builds a real
+`Sheet` whose frames are the grid's, and `TestGridSheetMatchesTheExport`
+asserts that sheet is the committed export, frame for frame and range for
+range — the same rectangles, the same durations, the same twelve animations in
+the same order. Only the names differ, because a grid says nothing about what
+a row is for. That test is the backwards-compatibility proof the design asked
+for, and it is what lets `cmd/lab` keep its `rowIdleRight`-style constants: a
+row index and a tag index are the same number.
+
+Three things fall out of that:
+
+| | |
+|---|---|
+| `ImageRow` | stopped meaning only a row. It is which animation is playing: a row on the grid, a tag's index with a sheet. `RowForState` and `Play` write the same field |
+| No new per-entity array | a sheet costs the entity store nothing, so the SoA layout and the wasm size are untouched by how a sheet is described |
+| `srcRect` | is the one place the two descriptions meet. The draw asks for a rectangle instead of computing one, so there is no second renderer to keep in step |
+
+**Reverse and ping-pong need no state to remember.** `FrameOffset` counts
+steps taken, always upwards, and the direction decides which frame a step lands
+on. A ping-pong of eight frames is fourteen steps rather than sixteen, because
+neither end is shown twice — which also makes a one-shot ping-pong stop after
+the way back instead of at the far end. `TestFrameAtStaysInTheTag` walks a
+hundred offsets of all three directions and asserts none of them ever addresses
+a frame belonging to another tag.
+
+**Two tests carry the lab's switch to a sheet.** It now attaches one, so the
+question is whether its sprites moved. `TestGridSheetDrawsWhatNoSheetDraws`
+walks every frame of every row through both paths and compares the rectangles;
+`TestGridSheetTimesFramesLikeNoSheet` steps two engines on a part-frame time
+step and compares which frame each is on. Together with the equivalence against
+the export, that is the whole chain: the export is the grid, the grid is a
+`Sheet`, and a `Sheet` draws what no sheet drew.
+
+### The scanner
+
+Hand-written, as decided, and the reason has not changed: TinyGo names
+`encoding/json` as partially supported because it leans on reflection, the
+reflective path is reported at around 119 KB against 27 KB without one, and the
+failure mode is a `reflect` panic in a browser on a build every gate called
+green.
+
+585 lines including its doc comments. It understands `frames[].frame.{x,y,w,h}`,
+`frames[].duration`, `meta.size.{w,h}` and
+`meta.frameTags[].{name,from,to,direction}`, and steps over every other value
+without interpreting it — which is what makes it survive Aseprite adding
+fields, and is asserted rather than hoped for.
+
+Every limit the design named is checked: input at most 4 MiB, depth at most 64,
 frames at most 65535, tags at most 1024, rects inside `meta.size` with positive
-width and height, `0 <= from <= to < len(frames)`, durations clamped to
-`[1, 60000]`, and `NaN` and infinities refused — JSON cannot spell them but
-`1e400` parses to positive infinity.
+width and height, `0 <= from <= to < len(frames)`, and `NaN` and infinities
+refused — JSON cannot spell them, but `1e400` parses to one, so the check is on
+the value rather than on the text. Durations are **clamped** to `[1, 60000]`
+rather than refused: Aseprite writes 0 for a frame the artist set to zero, and
+that is a sheet worth drawing, not a file worth rejecting.
 
-**Aseprite is not installed on this machine**, so the export cannot be produced
-here. The fixture must be a real export, made once on a machine that has
-Aseprite, committed and never hand-edited — a hand-written one would only prove
-the parser agrees with a guess about the format. Until it exists, ship a clearly
-labelled placeholder and have the test `t.Skip` with a message saying so. Never
-let a placeholder pass as evidence.
+Five sentinel errors, so a caller can tell "this is not the file I meant" from
+"this file is too big to be one": `ErrSheetTooLarge`, `ErrSheetSyntax`,
+`ErrSheetTooDeep`, `ErrSheetTooMany`, `ErrSheetRange`.
+
+**The fuzz target asserts what the draw trusts.** Rejecting rubbish is the
+easy half; the question that matters is whether anything the parser *accepts*
+is safe to draw, because the draw loop rechecks none of it. So the target
+re-asserts every invariant on success — rectangles inside the image, tags
+inside the frames, durations inside the clamp, names valid UTF-8 — and that
+every error is one of the five. 45 seconds, 10.9 million executions, nothing
+found.
+
+Two details the fuzzer's shape made obvious. The depth limit is only reachable
+through a value being *skipped*: the frames array refuses a `[` where it wants
+a frame object long before nesting could run out, so the first draft of that
+test was passing for the wrong reason. And a tag index arrives as a JSON
+number, so it is refused unless it survives the round trip through `float64`
+— otherwise `"from": 0.5` truncates into a valid-looking frame.
+
+**One real bug, found by writing the test rather than by the fuzzer.** A
+surrogate pair is spelled as two `\u` escapes, and the reader stepped two bytes
+past the backslash instead of one — landing after the `u` rather than on it, so
+the second `hex4` read three hex digits and whatever followed. Every tag name
+outside the basic plane failed to parse. `TestParseSheetUndoesEscapes` covers
+it, and the two attempts before it are worth recording: a heredoc turned the
+`\uXXXX` I wrote into the character it denotes, so the first two versions of
+the test exercised raw UTF-8 and passed against broken code. The escapes in
+that test are now built from `chr(92)` rather than typed.
+
+### What the lab does with it
+
+`cmd/lab` attaches a sheet and spawns with `e.Play(i, "run-right")`, so the
+sheet path is what the measured scene actually runs rather than something only
+the tests reach.
+
+**It has been run in a browser and the scene animates.** That is the last of
+milestone 5's *done means*, and it is the one no test could reach: every
+argument that the switch is safe — the export is the grid, the grid is a
+`Sheet`, a `Sheet` draws what no sheet drew — is an argument about `srcRect`,
+which only the js build ever calls. The tests make the claim; the browser is
+what checks it.
+
+It builds that sheet with `GridSheet` rather than parsing `lab.json`, and the
+reason is the size gate. The export is 26,901 bytes. Reaching it at runtime
+means either embedding it — a third of the module's remaining headroom to
+describe a sheet whose every frame is the same size — or a `syscall/js` fetch
+and the asynchrony that comes with it. Neither buys the lab anything, because
+its frames really are a grid. A game with a packed or per-frame-timed sheet
+parses the export; the engine cannot tell the two apart, and that is the point.
+
+The consequence to be honest about: **`ParseSheet` is dead code in
+`lab.wasm`**, dropped by the linker, so the module's 237,497 bytes do not price
+the scanner. A game that parses an export pays for it, and the 82,503 bytes of
+headroom are where it comes from.
+
+### Still open
+
+**The tileset has no sheet and does not want one.** `tiles.aseprite` exports as
+one frame, so its JSON carries no tags; `sheetFor` treats a sheet with no tags
+as no sheet, and the tilemap keeps indexing with `TilesetCols` and
+`TilesetRows`. `web/static/img/tiles.json` is committed because `make sheets`
+writes it, not because anything reads it.
+
+**`B` still needs re-reading, and now for two reasons.** The fixed tick moved
+`updateStates` off the frame, and the draw now calls `srcRect` per drawn entity
+instead of doing the arithmetic inline. Neither should cost much — one is a
+loop that was already skipping the spawned sprites, the other a bounds check
+and a pointer — but 34,476 was measured against neither.
 
 ## Commands
 
@@ -610,7 +751,7 @@ only.
 ```
 make          every gate against the working tree
 make ci       the same gates against the commit
-make sheet    export every assets/*.aseprite to a PNG and its JSON
+make sheets   export the .aseprite sources to their sheets and JSON
 make wasm     tinygo build ./cmd/lab, wasm-opt, then check the size budget
 make run      start cmd/serve on 127.0.0.1:8080
 make test     go test -race -shuffle=on ./...
@@ -643,14 +784,21 @@ statistics and the lab server. Four tests earn their place:
 - **Measuring a frame allocates nothing**, via `AllocsPerRun`.
 - **A fuzz target over the saved settings format**, because the browser's storage
   is user-editable.
+- **A fuzz target over the Aseprite export**, because the sheet is a file another
+  program wrote. It asserts the invariants the draw trusts and never rechecks,
+  not merely that rubbish is refused.
+- **The grid and the export describe the same sheet**, frame for frame, against
+  the committed export rather than a hand-written copy of one.
 
 The lab server was also run for real: correct CSP, `application/wasm`,
 digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 234,296 bytes, against a 320,000
-gate that now actually runs, so the size claim cannot rot. Also settle the `ReadMemStats`
+**With TinyGo installed — `make wasm`.** Done: 237,497 bytes, against a 320,000
+gate that now actually runs, so the size claim cannot rot. This line has been
+wrong twice — it still said 234,296 after two commits had moved the number — so
+read it against *Gates*, which is updated with the build rather than by hand. Also settle the `ReadMemStats`
 question before trusting the heap row, and use
 `tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` to see which
 package spends the bytes.
@@ -706,7 +854,11 @@ Six things are **not** mechanical:
   feel. Decide it; do not let the rename decide it.
 - **`AnimationFrameDuration` is load-bearing.** The melee attack's hit window is
   written as frames 4 to 6, which only means 400 to 700 ms because a frame is
-  100 ms. Moving to per-frame durations retimes every attack.
+  100 ms. Moving to per-frame durations retimes every attack. The migration does
+  not have to take that on: leaving `Engine.Sheets` empty keeps the grid and its
+  single duration, and the template can adopt a sheet as its own step once it
+  plays. Its art is the same `lab.aseprite` the export here came from, so
+  `GridSheet(8, 12, 32, 32, 100)` is provably its current sheet.
 - **Two menus, one keyboard.** The game binds `P` and the engine binds `M`, so
   they do not collide — and because the engine swallows the keyboard while its
   menu is open, the game's menu freezes rather than double-stepping. Worth a
@@ -873,7 +1025,6 @@ compiles everywhere.
 
 ## What this does not do
 
-- **No Aseprite sheets yet.** Milestone 5, designed above, not written.
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second
   platform layer. A follow-up, and a large one.
 - **No WebGL2 renderer.** A follow-up, gated on the number `B` produces.

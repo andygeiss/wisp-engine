@@ -51,6 +51,26 @@
 // adds its own above bit 15. [Engine.RowForState] maps a state to the sprite
 // sheet row that draws it, so the engine never has to know what an "attack" is.
 //
+// # Sheets
+//
+// A sprite sheet can be described two ways and the engine draws both the same.
+// The grid convention needs no description at all — every frame is the
+// entity's own size, an animation is a row, and [AnimationSettings] says how
+// long a frame lasts — and it is what a game gets by saying nothing.
+//
+// The other is what Aseprite exports: a rectangle and a duration per frame,
+// and named ranges over them. [ParseSheet] reads that export, "make sheets"
+// produces it, and the result goes in [Engine.Sheets], one per loaded image:
+//
+//	sheet, err := wisp.ParseSheet(exported)
+//	e.Sheets = []wisp.Sheet{sheet}
+//	e.Play(hero, "walk")
+//
+// Frames may then be any size, last different lengths, and play forwards,
+// backwards or back and forth. [GridSheet] builds the grid convention as the
+// same [Sheet], so the two are one code path rather than two renderers to keep
+// in step, and a game moving from one to the other does not move its sprites.
+//
 // # Time
 //
 // A frame and a tick are not the same thing. [Engine.Run] calls the update it

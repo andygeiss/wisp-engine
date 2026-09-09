@@ -65,13 +65,19 @@ func (e *Engine) advanceAnimations(dt float64) {
 // advanceAnimation moves entity i to its next frame when its frame time is up.
 // A one-shot animation stops after the last frame and, with StateAutoHide,
 // hides the entity.
+//
+// How long a frame lasts and how many of them a cycle takes come from
+// [Engine.cycle], which reads the entity's [Sheet] when it has one and
+// [AnimationSettings] when it does not. Everything below that is the same
+// either way, which is why a sheet needed no second animator.
 func (e *Engine) advanceAnimation(i int, dt float64) {
+	steps, dur := e.cycle(i)
 	e.FrameTime[i] += dt
-	if e.FrameTime[i] >= e.Animation.FrameDuration {
+	if e.FrameTime[i] >= dur {
 		e.FrameTime[i] = 0
 		e.FrameOffset[i]++
 	}
-	if e.FrameOffset[i] < e.Animation.FrameCount {
+	if e.FrameOffset[i] < steps {
 		return
 	}
 	e.FrameOffset[i] = 0

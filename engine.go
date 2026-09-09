@@ -58,8 +58,10 @@ type Engine struct {
 	ImageColumn []int
 	// ImageIndex is which loaded image, in [Engine.LoadImages] order.
 	ImageIndex []int
-	// ImageRow is the sheet row. RowForState overwrites it for entities whose
-	// state has a bit in RowMask.
+	// ImageRow is which animation is playing: a row on the grid convention, a
+	// tag's index when the image has a [Sheet]. RowForState overwrites it for
+	// entities whose state has a bit in RowMask, and [Engine.Play] writes the
+	// tag it looked up.
 	ImageRow []int
 	// ScreenSpace draws the entity in canvas pixels, past the camera.
 	ScreenSpace []bool
@@ -86,6 +88,13 @@ type Engine struct {
 	// RowMask picks the bits RowForState is keyed by. Start it with [MaskPose]
 	// and add the game's own action bits.
 	RowMask uint64
+
+	// Sheets describes the loaded images: one entry per image, in the order
+	// [Engine.LoadImages] took them. A game fills it once, from [ParseSheet]
+	// or [GridSheet]. An image with no entry — or a zero Sheet, or one with no
+	// tags — draws on the grid convention instead, so a game that never had a
+	// sheet never needs one. See [Sheet].
+	Sheets []Sheet
 
 	// CamTarget is the entity the camera follows, or -1 for none.
 	CamTarget int

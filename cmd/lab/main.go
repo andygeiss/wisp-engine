@@ -21,11 +21,30 @@ const (
 
 // Rows of the sheet, one animation each. They are the game-jam-template's own
 // sheet, so the lab animates without anybody drawing anything new.
+//
+// A row is also a tag's index, which is why these still name the right
+// animation now that the lab attaches a Sheet: the grid and the Aseprite
+// export describe the same twelve animations in the same order, and
+// TestGridSheetMatchesTheExport is what says so.
 const (
 	rowIdleRight = iota
 	rowIdleLeft
 	rowMoveRight
 	rowMoveLeft
+)
+
+// The sheet's shape, and the names the Aseprite export gives its first four
+// tags. The lab builds its Sheet with GridSheet rather than parsing
+// web/static/img/lab.json, because fetching and carrying 27 KB of JSON would
+// cost a third of the module's remaining size budget to describe a sheet whose
+// every frame is the same size. A game with a packed or per-frame-timed sheet
+// parses the export instead; the engine cannot tell the two apart.
+const (
+	sheetCols = 8
+	sheetRows = 12
+	frameMS   = 100
+
+	tagRunRight = "run-right"
 )
 
 const (
@@ -89,6 +108,17 @@ var (
 func main() {
 	e := wisp.New(wisp.Config{})
 	e.LoadImages("/static/img/lab.png", "/static/img/tiles.png")
+
+	// One sheet, for the sprites. The tileset gets no entry and so keeps the
+	// grid convention, which is what a tilemap wants: it indexes its tiles
+	// with its own rows and columns, and none of them is an animation.
+	sheet := wisp.GridSheet(sheetCols, sheetRows, tileSize, tileSize, frameMS)
+	sheet.Tags[rowIdleRight].Name = "idle-right"
+	sheet.Tags[rowIdleLeft].Name = "idle-left"
+	sheet.Tags[rowMoveRight].Name = tagRunRight
+	sheet.Tags[rowMoveLeft].Name = "run-left"
+	e.Sheets = []wisp.Sheet{sheet}
+
 	e.RowMask = wisp.MaskPose
 	e.RowForState = map[uint64]int{
 		wisp.StateFaceRight | wisp.StateIdle: rowIdleRight,
@@ -145,14 +175,17 @@ func spawn(e *wisp.Engine, n int) {
 		i := e.Add(wisp.Sprite{
 			Alpha:  0.6 + rand.Float64()*0.4,
 			Height: tileSize, Image: imageSprites,
-			Row:   rowMoveRight,
 			State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateVisible,
 			Width: tileSize,
 			X:     e.CamX + rand.Float64()*e.Width,
 			Y:     e.CamY + rand.Float64()*e.Height,
 			Z:     rand.IntN(3),
 		})
-		e.FrameOffset[i] = rand.IntN(e.Animation.FrameCount)
+		// A spawned sprite carries no move bits and no bit in RowMask, so
+		// nothing in the update will pick a row for it. Play is what names the
+		// animation instead of a bare index.
+		e.Play(i, tagRunRight)
+		e.FrameOffset[i] = rand.IntN(sheetCols)
 		spawned = append(spawned, i)
 		vx = append(vx, (rand.Float64()*2-1)*0.15)
 		vy = append(vy, (rand.Float64()*2-1)*0.15)

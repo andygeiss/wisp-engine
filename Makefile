@@ -8,6 +8,12 @@ ASEPRITE = /Applications/Aseprite.app/Contents/MacOS/aseprite
 # builds for js/wasm, so it has its own target.
 MAIN = ./cmd/serve
 
+# The engine's grid: eight frames of 32 px to a row. The width is what the
+# exporter is actually told, because Aseprite 1.3 ignores --sheet-columns.
+SHEET_COLUMNS = 8
+SHEET_TILE = 32
+SHEET_WIDTH = $(shell expr $(SHEET_COLUMNS) \* $(SHEET_TILE))
+
 # The headline number, as a gate. A claim nothing checks is a memory.
 WASM_MAX_BYTES = 320000
 
@@ -60,11 +66,24 @@ fmt:
 run:
 	set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run $(MAIN)
 
-# The art. Aseprite is a GUI app with a batch mode; the README says how to put
-# it on PATH. Each source becomes a packed sheet and the JSON that describes
-# it, which is what the engine reads instead of guessing a grid.
+# The art. Aseprite is a GUI app with a batch mode, so its CLI is ASEPRITE
+# above. Each source becomes a sheet and the JSON that describes it, which is
+# what ParseSheet reads instead of guessing a grid.
+#
+# The two assets are different kinds of thing, so they get a line each rather
+# than one loop that is wrong for one of them.
+#
+# An animation sheet is laid out as the engine's grid: SHEET_COLUMNS frames to
+# a row, so a Sheet parsed from the JSON and one built by GridSheet describe
+# the same pixels. Aseprite 1.3 ignores --sheet-columns, so the row is set in
+# pixels instead — SHEET_COLUMNS times the frame width. Packing or padding the
+# frames would break that equivalence, which is why neither is asked for.
+#
+# The tileset is one frame that a tilemap indexes with its own grid. A row
+# width would only pad it out to the animation grid it is not.
 sheets:
-	for f in assets/*.aseprite; do n=$$(basename "$$f" .aseprite); $(ASEPRITE) -b "$$f" --sheet web/static/img/$$n.png --sheet-type packed --shape-padding 1 --data web/static/img/$$n.json --format json-array --list-tags || exit 1; done
+	$(ASEPRITE) -b assets/lab.aseprite --sheet web/static/img/lab.png --sheet-type rows --sheet-width $(SHEET_WIDTH) --data web/static/img/lab.json --format json-array --list-tags
+	$(ASEPRITE) -b assets/tiles.aseprite --sheet web/static/img/tiles.png --sheet-type rows --data web/static/img/tiles.json --format json-array
 
 # The inner loop.
 test:

@@ -67,6 +67,38 @@ e.Impact(e.Feel.Heavy)  // a finisher
 The numbers behind those three live in [`Settings`](settings.go), which the
 menu edits while the game runs.
 
+## Sprite sheets, either way round
+
+Say nothing and you get the grid: every frame is the sprite's own size, an
+animation is a row, and `Animation.FrameDuration` times all of them. It costs
+nothing to state and it cannot describe anything else.
+
+Hand it an Aseprite export and frames may be any size, last different lengths,
+and play forwards, backwards or back and forth:
+
+```sh
+make sheets   # writes web/static/img/lab.png and lab.json
+```
+
+```go
+sheet, err := wisp.ParseSheet(exported)
+e.Sheets = []wisp.Sheet{sheet}   // one per image, in LoadImages order
+e.Play(hero, "walk")
+```
+
+`ParseSheet` is a hand-written scanner, not `encoding/json`: TinyGo supports
+reflection only partly, so the reflective path costs tens of kilobytes of a
+module under a size gate and fails as a `reflect` panic in a browser on a build
+every gate called green. It reads the six fields the engine needs and steps
+over the rest, so a newer Aseprite is not a breaking change, and it checks what
+it read — every rectangle inside the image, every tag naming frames that exist,
+every duration a real number of milliseconds.
+
+`GridSheet` builds the grid convention as the same `Sheet`, so the two are one
+code path with two ways in. That equivalence is a test against the committed
+export, which is what says a game can move to a sheet without its sprites
+moving.
+
 ## Run the lab
 
 The lab is the engine's own playground: a scene that exists to be tuned and
