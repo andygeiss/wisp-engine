@@ -4,8 +4,9 @@
 # Aseprite is a GUI application on macOS, so its CLI lives in the bundle.
 ASEPRITE = /Applications/Aseprite.app/Contents/MacOS/aseprite
 
-# The main package: the little server that hosts the lab. The lab itself only
-# builds for js/wasm, so it has its own target.
+# The main package: the server that hosts the lab — the page, the module and
+# the world it is played in. The lab itself only builds for js/wasm, so it has
+# its own target.
 MAIN = ./cmd/serve
 
 # The engine's grid: eight frames of 32 px to a row. The width is what the
@@ -94,7 +95,7 @@ test:
 # it must match the compiler that built the module. The optimized file is the
 # one cmd/serve serves, and it is committed so a fresh clone runs. The size
 # check is last, because the module's size is the claim this engine makes. It
-# builds to about 228 KB against the 320 KB gate above; the gate is the claim,
+# builds to about 267 KB against the 320 KB gate above; the gate is the claim,
 # not this comment, which is why the number here is approximate and the one in
 # WASM_MAX_BYTES is not.
 wasm:

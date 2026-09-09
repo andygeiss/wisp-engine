@@ -8,6 +8,10 @@ renderer, keyboard and mouse, a camera, and no dependencies at all.
 becomes editable, on the canvas, without a rebuild.** Nudge a knob, feel the
 difference, press `C`, and paste the result back into your source as Go.
 
+When a game is for more than one person, the same engine runs on a server
+that decides what happened, and the browser sends only what the player is
+trying to do. The lab plays that way out of the box: two tabs, one world.
+
 ## Install
 
 ```bash
@@ -101,13 +105,38 @@ moving.
 
 ## Run the lab
 
-The lab is the engine's own playground: a scene that exists to be tuned and
-measured.
+The lab is the engine's own playground: a scene that exists to be tuned,
+measured, and played by two people at once.
 
 ```bash
 make wasm   # needs TinyGo and wasm-opt
 make run    # http://127.0.0.1:8080/
 ```
+
+Open the page in two tabs and each tab is a player in one world. The server
+behind `make run` runs that world at 30 ticks a second and decides what
+happened; a tab sends only what its player is trying to do, and draws what
+comes back one server tick behind, blended between two ticks.
+
+| Key | What it does |
+|---|---|
+| `WASD` | move — the arrow keys work too |
+| `Q` | strike: removes every bouncer whose hit box overlaps yours, when the server says it does |
+| `E` | spawn ten bouncers around you, up to the server's cap |
+| `R` | dash: four times as fast for 300 ms |
+| `1` `2` `3` | a light, medium and heavy impact, on your own screen only |
+| `M` | the tuning menu · `H` the metrics overlay · `F` fullscreen |
+
+The three skills cool down for one, three and five seconds, and the cooldowns
+live on the server: a key held down does nothing until the server says so.
+The bars at the bottom right are the server's copy of them, and the line
+above the keys says what the wire costs — the round trip, the bytes a second,
+the size of a snapshot, and how often the tab had to wait for one or catch
+up. Nudging `World.Speed` in one tab's menu changes nothing in the world,
+because the tab does not simulate it.
+
+Add `?solo` to the URL — <http://127.0.0.1:8080/?solo> — for the scene on
+your machine alone, which is the one the ramp measures:
 
 | Key | What it does |
 |---|---|
@@ -121,6 +150,27 @@ make run    # http://127.0.0.1:8080/
 `B` is the answer to *"how many sprites before it drops below 60?"* — it walks
 the count up and stops at the first frame the 99th percentile cannot carry.
 That number is the evidence for whether this renderer needs replacing.
+
+### The server
+
+`make run` starts `cmd/serve` on 127.0.0.1:8080: the page, the module and the
+world, over one origin. Its flags each default to an environment variable,
+and `go run ./cmd/serve -h` is the whole contract:
+
+| Flag | Variable | Default | What it is |
+|---|---|---|---|
+| `-addr` | `ADDR` | `127.0.0.1:8080` | where to listen |
+| `-dir` | `WEB_DIR` | `web` | the tree to serve |
+| `-tick` | `TICK` | `30` | world ticks a second, 1 to 120 |
+| `-players` | `PLAYERS` | `8` | players at once |
+| `-bouncers` | `BOUNCERS` | `1000` | the most bouncers at once |
+| `-crowd` | `CROWD` | `100` | the bouncers the world starts with |
+| `-log-level` | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+
+A tab that stops reading is closed rather than waited for, so one slow tab
+cannot slow the world, and a tab that sends more than 120 messages a second
+is closed too. The socket speaks RFC 6455 and a ten-message binary protocol,
+both written by hand in `internal/`, for the reason the sheet scanner is.
 
 ### Inside the tuning menu
 
@@ -149,7 +199,7 @@ make          # every gate against the working tree
 make ci       # the same gates against the last commit
 make sheets   # export assets/*.aseprite to a sheet and its JSON
 make wasm     # compile the lab and copy the browser artefacts
-make run      # start the lab server
+make run      # start the lab server: the page, the module and the world
 make test     # go test -race -shuffle=on ./...
 make build    # release-shaped binaries in bin/
 make fmt      # goimports + go fix
@@ -159,13 +209,20 @@ make clean    # rm -rf bin/
 ## Baseline deviations
 
 This project follows the [engineering baseline](https://github.com/andygeiss/baseline).
-Four of its rules are waived here.
+Five of its rules are waived here.
 
 - **No `main` package** ([project-types/library.md](https://github.com/andygeiss/baseline/blob/main/project-types/library.md))
   — waived 2026-09-09 by Andy. A feel engine is judged by feel, so it ships the
   playground that proves it. Scoped to `cmd/lab`, which only builds for
-  js/wasm, and `cmd/serve`, a development-only static file server; the library
-  imports neither, and `go list -deps .` shows only the standard library.
+  js/wasm, and `cmd/serve`, the lab's server — the page, the module and the
+  world over one WebSocket — which is never deployed until a milestone says
+  otherwise; the library imports neither, and `go list -deps .` shows only
+  the standard library.
+- **Every mutation is a POST route** ([checklists/web-application.md](https://github.com/andygeiss/baseline/blob/main/checklists/web-application.md))
+  — waived 2026-09-09 by Andy. The world's mutations arrive over the
+  WebSocket at `GET /ws`, as intents. The rule protects the no-JS fallback of
+  a plain form, and a canvas client has no such fallback to protect. Scoped
+  to `/ws`; every other route is a GET that changes nothing.
 - **No hand-written JavaScript** ([stack/html.md](https://github.com/andygeiss/baseline/blob/main/stack/html.md))
   — waived 2026-09-09 by Andy. A browser can only start a WebAssembly module
   from a script, and the module's own size and the GPU's name are not reachable
@@ -199,12 +256,32 @@ Conformance notes, for the reader who checks the boxes:
 - **`context.Context` is not the first parameter of `Engine.Run`**, the only
   call that blocks. The browser owns the frame loop's lifetime and nothing on
   the Go side can cancel it; `Engine.Stop` is the handle the rule is asking for.
+- **RFC 6455 and the wire are hand-written**, in `internal/ws` and
+  `internal/wire`, for the reason the sheet scanner is: the standard library
+  has no WebSocket, the dependency rule refuses one, and the client is TinyGo,
+  which pays for reflection in kilobytes and fails at it in a browser.
+- **The socket's deadlines are set after the hijack.** `http.Server`'s read,
+  write and idle timeouts stop seeing a hijacked connection, so `ws.Accept`
+  clears the ones net/http left and the server sets its own: a read deadline
+  of twice the ping interval, refreshed by every frame, and a write deadline
+  per write. That is how the timeout rule is met on a connection the server's
+  timeouts cannot reach, and it is `WriteTimeout` replaced, not widened — the
+  30 seconds still cover the page and the tree.
+- **Shutdown cancels first and waits after.** `srv.Shutdown` never drains a
+  hijacked connection, so `RegisterOnShutdown` closes every socket with 1001
+  and `hub.Wait()` after `Shutdown` waits for their goroutines. That is the
+  background-work pattern's shape.
+- **No `errgroup`.** `golang.org/x/sync` is how the baseline writes background
+  work and a dependency in a module whose feature is having none. Two
+  goroutines under one signal context and a wait for each do what it would;
+  `run` in `cmd/serve/main.go` is those twenty lines.
 - `make sheets` and `make wasm` are rule-3 targets: the recurring commands the
   gates cannot run.
 - No `htmx`: the page has no hypermedia interaction, so the script would do
   nothing.
-- No ops listener and no pprof. The lab server is a development tool that never
-  deploys, and profiling the game means the browser's own tools.
+- No ops listener, no pprof and no `/healthz`. The lab server never deploys —
+  the server that ships is a milestone of its own — and profiling the game
+  means the browser's own tools.
 - `devicePixelRatio` is deliberately unhandled — see `DESIGN.md`.
 - TinyGo decides which Go the engine can be built with, so the Go pin cannot
   move ahead of it. 0.42 was the first release to accept 1.27.

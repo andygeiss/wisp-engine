@@ -1,11 +1,12 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 to
-7 of 9 are built — the three engine hooks, the wire, the socket, the lab's
-rules, the server, the replica and the client — and so is the hit-box half of
-step 0; the other half of step 0, looking at the blend, is still open, and
-the client half missed its size ceiling by a measured margin that is the
-brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
+**Status: milestones 1 to 6 are built and green. 7 is built through step 8
+of 9 — the three engine hooks, the wire, the socket, the lab's rules, the
+server, the replica, the client, and the README, SPEC and Makefile that go
+with them — and so is the hit-box half of step 0. What is left needs a person
+at a browser: the other half of step 0, looking at the blend, and step 9, two
+tabs playing one world, the numbers, and the tag. The client half missed its
+size ceiling by a measured margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -106,7 +107,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — steps 1 to 7 of 9 are built, the three engine hooks, the wire, the socket, the lab's rules, the server, the replica and the client, and so is the hit-box half of step 0; the blend verdict and the two-browser run wait on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **built through step 8 of 9** — everything but the two-browser run and the tag, which wait on a browser along with the blend verdict of step 0; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -1689,10 +1690,10 @@ no other document restate the policy. `TestSecureHeaders` keeps pinning the
 string either way. The `Origin` check is the server's half: the policy
 protects the page, not the server.
 
-### What the README will say
+### What the README says
 
-Recorded here now, so the plan and the README agree on the day. Two waivers,
-in the six-field form:
+Recorded here before the README was written, so the plan and the README
+agree; they do, as of step 8. Two waivers, in the six-field form:
 
 - **No `main` package** — the existing waiver's scope widens: `cmd/serve`
   becomes the lab's server — the page, the module and the world — and is still
@@ -1741,7 +1742,13 @@ Each step is green on its own and is its own commit.
    built* is the accounting.
 8. **README, SPEC and Makefile**: the waivers and notes above, the run
    instructions, the key table for network mode, `?solo` in SPEC's lab line;
-   the js vet line only if a js-only package appears under `internal/`.
+   the js vet line only if a js-only package appears under `internal/` —
+   **done**. No js-only package appeared under `internal/`, so the vet line
+   did not change; the README gained the two waivers and the five notes as
+   written below, a key table for the wire, one for `?solo`, and the server's
+   flags; SPEC's lab line points at `?solo` and says the bare URL is the
+   wire; the Makefile's two comments that named the old server and the old
+   size say the new ones.
 9. **Two browsers**, the list below; the numbers into this file; `make ci`;
    tag `v0.2.0`, with the three hooks named in the tag message.
 

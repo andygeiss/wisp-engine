@@ -49,9 +49,9 @@ nobody changed it twice, and no number anywhere said what a change cost.
 - The [library checklist](https://github.com/andygeiss/baseline/blob/main/checklists/library.md)
   is walked, and every box is checked or waived on the record in the README.
 - `make ci` is green on the commit being pushed.
-- The lab runs. `make wasm`, `make run`, then at <http://127.0.0.1:8080/>: `M`
-  opens the tuning menu, `]` spawns sprites, and the overlay says how many the
-  frame time can carry.
+- The lab runs. `make wasm`, `make run`, then at <http://127.0.0.1:8080/?solo>:
+  `M` opens the tuning menu, `]` spawns sprites, and the overlay says how many
+  the frame time can carry. The same URL without `?solo` is the wire.
 - Two browsers on one machine play one world: each moves its own sprite and
   sees the other's, a strike lands only when the server says so, and `?solo`
   still ramps.
