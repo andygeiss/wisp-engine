@@ -10,7 +10,7 @@ that serves it runs the world: the game state lives on the server, the browser
 sends only what the player is trying to do, cooldowns live on the server and
 the client copies them for its bars, and the camera is the client's. That is a
 thin client, and it dissolves three of the four questions the old brief left
-open. *Networking — milestone 7, decided and planned* is the ordered plan, and
+open. *Networking — milestone 7, under way* is the ordered plan, and
 `SPEC.md` carries the wider job as of the same change.
 
 **Three changes landed ahead of it**: an entity index is now a name the engine
@@ -30,13 +30,14 @@ the record of what was not mechanical about it.
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
 
-**The blend between two ticks has not been looked at, and that is the one thing
-outstanding.** It is built, every gate is green, and `make wasm` has rebuilt
-the module with it — but the claim it makes is that the motion is visibly
-smoother, and that is a claim about `pass` in `runtime_js.go`, the one line it
-changed that no test reaches. Step 8 of *Verification* is the check, and it is step 0
-of milestone 7: a network client draws nothing but that blend, so it is looked
-at before anything is built on it.
+**The blend between two ticks has not been looked at, and it is the loose end
+everything after it leans on.** It is built, every gate is green, and
+`make wasm` has rebuilt the module with it — but the claim it makes is that the
+motion is visibly smoother, and that is a claim about `pass` in
+`runtime_js.go`, the one line it changed that no test reaches. Step 8 of
+*Verification* is the check, and it is step 0 of milestone 7: a network client
+draws nothing but that blend, so it is looked at before anything is built on
+it.
 
 ## Context
 
@@ -146,8 +147,9 @@ KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. Th
 free list and the fixed tick cost 586 bytes of that between them, the sheet
 2,615 more, and the blend between two ticks 1,972; the three hooks of
 milestone 7 then took 36 off, because folding the movement into one function
-gave the compiler back more than the new branch cost. `ParseSheet` is not among those 2,615: the lab builds its sheet with
-`GridSheet`, so the scanner is dead code the linker drops.
+gave the compiler back more than the new branch cost. `ParseSheet` is not
+among those 2,615: the lab builds its sheet with `GridSheet`, so the scanner is
+dead code the linker drops.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
 `fullscreenAt` and `claimsKey` are reached only from `runtime_js.go`, so the
@@ -169,7 +171,7 @@ where there is no fullscreen to ask for.
 | Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — not exposed by browsers`, never a made-up number. |
 | Sheet parsing | A hand-written scanner, not `encoding/json`. See *Aseprite sheets*. |
 | Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. |
-| Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, decided and planned*. |
+| Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, under way*. |
 | Transport | WebSocket, hand-written on both sides, because the dependency rule refuses everything else a browser offers. TCP, so a 15-to-30 Hz game; 30 on the wire. |
 | Where the netcode lives | `internal/`, public the day a second consumer needs it. `cmd/serve` grows into the game server; there is no third `cmd/`. |
 | The lab's skills | `Q` strike, `E` spawn, `R` dash — the template's keys and cooldowns, so its migration maps one to one. |
@@ -1081,7 +1083,7 @@ holding a key no longer re-fires the instant its cooldown ends. Neither is
 hard to put back: the margin is `World.HitBoxMargin` in the tuning menu, and
 the keys are one `JustPressed` to `Down` each.
 
-## Networking — milestone 7, decided and planned
+## Networking — milestone 7, under way
 
 The decision this file said had to come first has been taken, and it is
 narrower than the brief it replaces. **The lab becomes the network client, and
@@ -1089,8 +1091,9 @@ the server that serves the lab also runs the world.** The game state lives on
 the server. The client sends what the player is trying to do — a direction, a
 skill — and gets the world back; the server owns every position and every
 cooldown, and the client owns the camera and everything else a player only
-looks at. Nothing is written yet. This section is the plan, in the order it is
-built, with each decision recorded next to what it decided.
+looks at. The engine's three hooks are written; nothing that touches a socket
+is. This section is the plan, in the order it is built, with each decision
+recorded next to what it decided and each step marked when it lands.
 
 ### The brief
 
@@ -1234,8 +1237,8 @@ Each is a few lines, each has a test, and `make wasm` says what each cost.
 | Hook | What it does | Why the engine and not the client |
 |---|---|---|
 | `StateRemote`, bit 14 | `updateStates` skips movement and the idle/move rewrite for an entity carrying it, and still picks its row from the state bits | The client stores the server's bits as they are, `StateRemote` added, so `Camera.Lookahead` reads real move bits. Stripping the move bits instead would leave look-ahead silently dead on every network client — a claim nothing checks |
-| `Engine.Move(i, dx, dy)` | steers entity i from an axis: the move bits, the facing, the facing lock. `applyInput` becomes one call to it | A server has N players and no `Input`. Only the sign of dx and dy counts, so a hand-crafted 100 is a 1 |
-| `Input.MoveAxis()` | today's `moveAxis`, exported | The client turns keys into an intent the same way the engine turns them into bits |
+| `Engine.Move(i, dx, dy)` | steers entity i from an axis: the move bits, the facing, the facing lock. `applyInput` became one call to it | A server has N players and no `Input`. Only the sign of dx and dy counts, so a hand-crafted 100 is a 1 |
+| `Input.MoveAxis()` | the old `moveAxis`, exported | The client turns keys into an intent the same way the engine turns them into bits |
 
 Bit 14 is one of the two the engine reserved for itself; 15 stays spare. The
 tests: a `StateMoveRight|StateRemote` entity does not move over a tick and
@@ -1536,9 +1539,9 @@ effect of this work:
   that have happened, which costs up to one tick of lag. Guessing at the tick
   that has not is what a 60 Hz twitch game would want, and it is wrong every
   time something turns around. See *The draw blends between two ticks*.
-- **No networking yet.** Milestone 7 is decided and planned, down to the order
-  it is built in, and none of it is written. The transport is decided by the
-  dependency rule and measured.
+- **No networking yet.** Milestone 7 is under way: the engine's three hooks
+  are in, and nothing that touches a socket is written. The transport is
+  decided by the dependency rule and measured.
 - **No networked `game-jam-template`.** Its rules run once a frame in the
   update given to `Run`, its action windows are indexed off animation frames,
   and its state is package-level globals with one hero at index 0. All three
