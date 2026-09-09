@@ -251,3 +251,60 @@ func stutter(n int, base, peak float64) []float64 {
 	}
 	return s
 }
+
+// The next two live here rather than in package wisp_test because the browser
+// half is the only other caller, and it never builds on a developer's machine.
+
+func TestClaimsKey(t *testing.T) {
+	t.Parallel()
+	e := New(Config{})
+	cases := map[string]bool{
+		"ArrowDown": true, // the browser would scroll the page
+		"ArrowLeft": true,
+		"Tab":       true,
+		" ":         true,
+		"F":         true,  // the default fullscreen key, upper case off a shift
+		"m":         true,  // the default menu key
+		"a":         false, // the game's, so the browser keeps its own
+		"F5":        false, // reload stays the browser's
+	}
+	for key, want := range cases {
+		if got := e.claimsKey(key); got != want {
+			t.Errorf("claimsKey(%q) = %v, want %v", key, got, want)
+		}
+	}
+}
+
+func TestClaimsNoKeyWhenTurnedOff(t *testing.T) {
+	t.Parallel()
+	// KeyNone spells a key a game may still use, so it must not be claimed
+	// just because it is what the off switch happens to look like.
+	e := New(Config{FullscreenKey: KeyNone, MenuKey: KeyNone})
+	if e.claimsKey(KeyNone) {
+		t.Errorf("claimsKey(%q) = true with both keys off, want false", KeyNone)
+	}
+	if !e.claimsKey("ArrowUp") {
+		t.Error("claimsKey(\"ArrowUp\") = false, want true: scrolling is still not wanted")
+	}
+}
+
+func TestFullscreenDebounce(t *testing.T) {
+	t.Parallel()
+	e := New(Config{})
+	e.Time.FullscreenDebounce = 500
+
+	if !e.allowFullscreen(1000) {
+		t.Fatal("allowFullscreen(1000) = false on the first ask, want true")
+	}
+	if e.allowFullscreen(1499) {
+		t.Error("allowFullscreen(1499) = true one millisecond inside the debounce, want false")
+	}
+	if !e.allowFullscreen(1500) {
+		t.Error("allowFullscreen(1500) = false once the debounce has passed, want true")
+	}
+	// The refused ask must not have moved the clock forward, or a held key
+	// would push the next toggle further away with every frame.
+	if !e.allowFullscreen(2000) {
+		t.Error("allowFullscreen(2000) = false, want true: a refusal must not restart the debounce")
+	}
+}

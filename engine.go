@@ -306,3 +306,16 @@ func (e *Engine) claimsKey(key string) bool {
 	}
 	return false
 }
+
+// allowFullscreen reports whether a fullscreen toggle may happen now, and
+// records the time when it may. Browsers refuse a burst of requests, so two
+// toggles closer together than [TimeSettings.FullscreenDebounce] are one. The
+// browser half calls it; it lives here so the rule can be tested off a
+// browser, where there is no fullscreen to ask for.
+func (e *Engine) allowFullscreen(now float64) bool {
+	if now-e.fullscreenAt < e.Time.FullscreenDebounce {
+		return false
+	}
+	e.fullscreenAt = now
+	return true
+}

@@ -386,11 +386,9 @@ func (r *backend) pass(e *Engine, screenSpace bool) {
 // toggleFullscreen enters or leaves fullscreen, no more often than the
 // debounce allows: browsers refuse a burst of requests.
 func (r *backend) toggleFullscreen(e *Engine) {
-	now := r.perf.Call("now").Float()
-	if now-e.fullscreenAt < e.Time.FullscreenDebounce {
+	if !e.allowFullscreen(r.perf.Call("now").Float()) {
 		return
 	}
-	e.fullscreenAt = now
 
 	for _, name := range []string{"fullscreenElement", "webkitFullscreenElement"} {
 		if el := r.doc.Get(name); el.Truthy() && el.Equal(r.canvas) {
