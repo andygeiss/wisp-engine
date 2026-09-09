@@ -1,9 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
 **Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 to
-4 of 9 are built — the three engine hooks, the wire, the socket and the lab's
-rules — and so is the hit-box half of step 0; the other half of step 0,
-looking at the blend, is still open.** This file is both the plan and the record — what was decided, what was
+5 of 9 are built — the three engine hooks, the wire, the socket, the lab's
+rules and the server — and so is the hit-box half of step 0; the other half
+of step 0, looking at the blend, is still open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -104,7 +104,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — steps 1 to 4 of 9 are built, the three engine hooks, the wire, the socket and the lab's rules, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — steps 1 to 5 of 9 are built, the three engine hooks, the wire, the socket, the lab's rules and the server, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -197,8 +197,15 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            144 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      243 the playground (js && wasm)
-│   └── serve/main.go    230 the static file server behind `make run`
+│   ├── lab/main.go          243 the playground (js && wasm)
+│   ├── serve/client.go      252 one socket: its reader, its writer, the hub
+│   ├── serve/config.go      103 the flags, each defaulting to its variable
+│   ├── serve/config_test.go  92 defaults, precedence, every refusal
+│   ├── serve/main.go        112 the wiring: config, world, server, shutdown
+│   ├── serve/main_test.go   183 headers, caching, the version, traversal
+│   ├── serve/pages.go       181 the page and the tree, the static half
+│   ├── serve/world.go       289 the tick: joins, intents, skills, the snapshot
+│   └── serve/world_test.go  582 two players over net.Pipe, in a synctest bubble
 ├── DESIGN.md                the page's tokens
 ├── doc.go               111 the package doc
 ├── engine.go            450 Engine, Config, New, Step, Tick, DrawPos, Impact
@@ -240,8 +247,9 @@ wisp-engine/
 └── wisp_test.go        1458 the consumer's view: entities, camera, input, menu
 ```
 
-3,792 lines of engine that build anywhere, 491 behind the browser tag, 3,019 of
-tests, 473 of lab and server. The counts in that listing are hand-written and
+3,792 lines of engine that build anywhere, 491 behind the browser tag and
+3,019 of tests; 1,180 of lab and server with 857 of tests; 1,309 under
+`internal/` with 1,029 of tests. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
 were put back, and is what to run rather than trust them.
@@ -1437,6 +1445,49 @@ frame, and both deadlines. `FuzzRead` ran 15 seconds — 3.5 million
 executions — under the rule that a read ends in a message under the cap or
 one of the three errors a caller is written for, and found nothing.
 
+**The server is built.** `cmd/serve` is five files now — `main.go` is the
+wiring and nothing else, `config.go` the flags, `pages.go` the static half
+that used to be all of it, `world.go` the tick and `client.go` one socket —
+and six things were decided in the writing that the bullets above had not
+settled:
+
+- **The tick goroutine never writes to a socket.** A close frame is a write,
+  and a write to a client that has stopped reading blocks until its deadline.
+  A client's `stop` closes a channel and records the code; the socket's own
+  writer does the closing when it wakes — at once when it is idle, within one
+  write deadline when it is stuck. That is what makes "a slow client cannot
+  slow the world" true rather than said.
+- **A batch, not a message, is the unit a client is judged by.** The queue
+  holds sixty-four batches: a join's Welcome and every Spawn in the world go
+  in as one, a tick's Snapshot and You as one, so a crowd of a thousand does
+  not close the newcomer for being slow before it has seen anything.
+- **A Pong comes from the reader, not from the tick**, so the RTT the client
+  prints is the network's and not the network's plus half a tick. The tick
+  counter is atomic for that one read.
+- **`-crowd` joined the flags** — how many bouncers the world starts with,
+  100 by default under the cap of 1,000 — because *Numbers to write down*
+  wants snapshot bytes at 100 and at 1,000 bouncers, and reaching a thousand
+  by pressing `E` every three seconds is five minutes of pressing. A crowd
+  over the cap is refused at boot, as the pair it is.
+- **The request log says 101 for a socket**, when the socket closes, with
+  how long it lived: `statusWriter` grew a `Hijack` of its own that records
+  the switch, and an `Unwrap` so `http.ResponseController` reaches the writer
+  underneath for everything else.
+- **`http.MaxBytesHandler` and `http.CrossOriginProtection` wrap the mux**
+  although a GET-only server gives them nothing to do. They are there so the
+  day it answers anything else they already are, and neither touches the
+  handshake.
+
+The tests are the seven the bullets asked for and a few more — `parseConfig`
+in a table, three first messages the server refuses, a full world, a hundred
+and twenty-one pings in a second — and they run the real routes over
+`net.Pipe` inside a `synctest` bubble: "the reader has posted the join" is
+`synctest.Wait()`, "the stuck writer has reached its deadline" is
+`synctest.Sleep`, and the package takes a second and a half under `-race`
+with no clock anywhere in it. `log.Printf` is `slog` now, a text handler
+built in `main` and handed down, and the boot line logs the config as one
+group.
+
 ### The lab's rules — `internal/lab`
 
 What both halves have to agree on, in one package with no `syscall/js` in it:
@@ -1576,7 +1627,7 @@ Each step is green on its own and is its own commit.
 4. **`internal/lab`**: the skills, the cap, the dash timer, the bounce, and
    their tests — **done**.
 5. **`cmd/serve`**: `config.go`, `slog`, the hub, `world.Tick`, `/ws`,
-   shutdown, and the `-race` tests over `net.Pipe`.
+   shutdown, and the `-race` tests over `net.Pipe` — **done**.
 6. **`internal/replica`**: the slot map, the ordered queue, hold, fast-forward
    and catch-up, each with a test.
 7. **`cmd/lab`**: network mode, the HUD, the net line, `?solo`; `make wasm`;

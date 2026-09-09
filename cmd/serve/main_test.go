@@ -49,8 +49,12 @@ func get(t *testing.T, tree fs.FS, path string) *http.Response {
 	if err != nil {
 		t.Fatal(err)
 	}
+	handler, err := routes(tree, version, quiet, newWorld(Config{Players: 1, Tick: 30}, quiet))
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
-	routes(tree, version).ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 	return w.Result()
 }
 
