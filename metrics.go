@@ -191,9 +191,11 @@ func (m *metrics) mean() float64 {
 
 // sampleHeap reads the Go heap, once a second rather than once a frame.
 //
-// Reading it is not free: under TinyGo's conservative collector it walks the
-// heap, so a per-frame read would show up in the very frame time it is meant
-// to explain.
+// Reading it is not free: TinyGo's ReadMemStats walks the whole block
+// metadata to count what is live, so a per-frame read would show up in the
+// very frame time it is meant to explain. HeapAlloc is one of the fields it
+// really fills — the wasm target builds the gc_blocks collector, which assigns
+// it — so the row is a measurement rather than a constant.
 func (m *metrics) sampleHeap(elapsed float64) {
 	m.heapAt += elapsed
 	if m.heapAt < 1000 && m.n > 0 {

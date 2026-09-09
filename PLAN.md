@@ -1,6 +1,6 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 5 are built and green. 6 and 7 are not started.**
+**Status: milestones 1 to 6 are built and green. 7 is not started.**
 This file is both the plan and the record — what was decided, what was built,
 what changed while building it, and what is left.
 
@@ -10,6 +10,12 @@ of on however long the frame took. Both stand on their own merit and both are
 green — *Two changes networking needs* has them. Milestone 7 itself is a brief
 and nothing else, and it needs a decision about this project's job before it is
 more than that.
+
+**The module has a consumer.** `game-jam-template` deleted its copy of the
+engine and requires `github.com/andygeiss/wisp-engine v0.1.0` — the repository
+is public and tagged, both gates are green on the commit, and the library
+checklist's first box is checked at last. *Migrating `game-jam-template`* is
+the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
 `make wasm` produces a 228 KB module, every gate is green including the two
@@ -58,9 +64,11 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42 — 309 KB is the number to protect; the module measures 229 KB. All overlay UI is drawn on the
-  canvas, never as DOM, so it survives fullscreen. `game-jam-template` is not
-  touched until the last milestone.
+  TinyGo 0.42; the module measures 232 KB against a 320,000-byte gate. All
+  overlay UI is drawn on the canvas, never as DOM, so it survives fullscreen.
+  309 KB was the number to protect in `game-jam-template`, and it was not
+  protected: importing the module took that game to 411 KB. See *Migrating
+  `game-jam-template`*, which says where the bytes went and what they buy.
 - **Done means:** `make check` and `make ci` are green; the library checklist is
   walked with every box checked or waived in the README; the lab runs in a
   browser and `M`, the spawn key and the overlay all do what they say;
@@ -75,7 +83,7 @@ open and press keys in.
 | 3. `Settings` and the `M` menu | **done** |
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
-| 6. `game-jam-template` imports the module | **not started** |
+| 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
 | 7. A networked game | **not started** — a brief, below, and two of its groundwork changes already landed |
 
 Two follow-ups, each gated on evidence rather than scheduled:
@@ -500,10 +508,16 @@ a graph.
 a percentile. It is the one test that does not run in parallel, because
 `AllocsPerRun` counts the whole process.
 
-**Still unverified, and it needs TinyGo:** which `MemStats` fields TinyGo
-actually fills. Every field it does not assign reads 0. Check with
-`grep -A 25 'func ReadMemStats' "$(tinygo env TINYGOROOT)"/src/runtime/gc_*.go`
-before trusting the heap row, and delete the row rather than ship a constant.
+**The heap row is real, and this is now checked rather than assumed.**
+`targets/wasm.json` sets `"gc": "precise"`, and `src/runtime/gc_blocks.go` —
+built for `gc.conservative || gc.precise` — assigns `HeapAlloc`, along with
+`Alloc`, `HeapInuse`, `HeapObjects`, `Mallocs`, `Frees`, `TotalAlloc` and
+`NumGC`. `metrics.go` reads `HeapAlloc`, so the row shows a number TinyGo
+actually fills and the "delete it rather than ship a constant" branch does not
+apply. The collector on this target is the *precise* one and not the
+conservative one this file and `metrics.go` both used to name; the reason for
+sampling once a second survives the correction, because `ReadMemStats` walks
+the block metadata either way.
 
 ## The lab — `cmd/lab`
 
@@ -798,10 +812,10 @@ boot with the command to run.
 **With TinyGo installed — `make wasm`.** Done: 237,497 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
-read it against *Gates*, which is updated with the build rather than by hand. Also settle the `ReadMemStats`
-question before trusting the heap row, and use
-`tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` to see which
-package spends the bytes.
+read it against *Gates*, which is updated with the build rather than by hand.
+`tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` says which
+package spends the bytes, and `strings` over the unstripped build says which
+functions survived the linker — that pair is what priced the template's 100 KB.
 
 **In a browser — `make run`, then <http://127.0.0.1:8080/>.**
 
@@ -825,54 +839,97 @@ package spends the bytes.
 7. `F` — fullscreen. The overlay and the menu are still there, because they are
    drawn inside the canvas. Anything that disappears was in the DOM.
 
-## Migrating `game-jam-template` — milestone 6, not started
+## Migrating `game-jam-template` — milestone 6, done
 
-Mostly mechanical, and worth doing in one commit so `make wasm` and the committed
-`game.wasm` move together.
+`internal/engine/` is deleted — 802 lines of engine and 455 of its tests — and
+`go.mod` requires `github.com/andygeiss/wisp-engine v0.1.0`. The repository is
+public and tagged for it; a private module behind a public template would have
+been a template nobody but its author could build. `make check`, `make ci` and
+`make wasm` are green on the commit, with no `GOPRIVATE` in the environment,
+which is the part that proves an ordinary clone works.
 
-- Delete `internal/engine/`, add `require github.com/andygeiss/wisp-engine v0.x`.
-- Create one `e := wisp.New(...)` in `main` and pass it down. `engine.EntityX[i]`
-  becomes `e.X[i]`, `engine.StateEntity*` becomes `wisp.State*`,
-  `engine.CanvasWidth` becomes `e.Width` — **and every surrounding `float64(...)`
-  cast goes**, because `Width` and `Height` are already `float64`.
-- `engine.Run(update)` plus `select {}` becomes `e.Run(update)`.
-- Replace the six scattered hit-stop and shake literals with
-  `e.Impact(e.Feel.Light)`, `.Medium` or `.Heavy`. `damageBoss`'s 4.0 and 150 and
-  `hurtPlayer`'s 4.0 are already the defaults.
-- Drop every hand-cleared key bool in favour of `e.Input.JustPressed(...)`. Five
-  clear-sites go, and `stateAction2` stops being needed for edge tracking.
+The mechanical half was as predicted. `engine.EntityX[i]` is `e.X[i]`,
+`engine.StateEntity*` is `wisp.State*`, `engine.CanvasWidth` is `e.Width` and
+every surrounding `float64(...)` went with it, `engine.Run(update)` plus
+`select {}` is `e.Run(update)`, and the six `AddEntity` call sites are `Sprite`
+literals. The game's own code came out 423 bytes *smaller* than before.
 
-Six things are **not** mechanical:
+### The six that were not mechanical, and what was decided
 
-- **The six `AddEntity` call sites** become `Sprite` literals. This is where a
-  mistake hides: `imgCol` and `imgRow` are adjacent `int`s today. Read each one.
-- **The hit-box fix changes collisions.** The box moves from 20x20 offset 6 px
-  down-right to 20x20 centred. Play the boss fight before and after.
-- **`handleAction1` and `handleAction3` are a judgement call.** They read `KeyQ`
-  and `KeyR` level-triggered behind a cooldown, so holding the key re-fires the
-  instant it ends. `JustPressed` is more correct and is a change a player will
-  feel. Decide it; do not let the rename decide it.
-- **`AnimationFrameDuration` is load-bearing.** The melee attack's hit window is
-  written as frames 4 to 6, which only means 400 to 700 ms because a frame is
-  100 ms. Moving to per-frame durations retimes every attack. The migration does
-  not have to take that on: leaving `Engine.Sheets` empty keeps the grid and its
-  single duration, and the template can adopt a sheet as its own step once it
-  plays. Its art is the same `lab.aseprite` the export here came from, so
-  `GridSheet(8, 12, 32, 32, 100)` is provably its current sheet.
-- **Two menus, one keyboard.** The game binds `P` and the engine binds `M`, so
-  they do not collide — and because the engine swallows the keyboard while its
-  menu is open, the game's menu freezes rather than double-stepping. Worth a
-  sentence in the commit so nobody "fixes" it later.
-- **`stateAction1` and friends start at bit 16.** Confirm the engine still claims
-  only bits 0 to 13, so the game's bits stay free.
+| | |
+|---|---|
+| **`Reset` clears `CamTarget` and `InputTarget`** | The one this plan did not predict. `InitializeEntities` left them alone, so `main` set `CamTarget = 0` once at startup and never again. `enterScene` claims the hero after every reset now; without it the camera stops following on `N`, and no gate anywhere would have said so |
+| **The hit box moved** | From 20x20 offset six pixels down and right to 20x20 centred, exactly as *Fixes that landed during the move* describes. Same size, different place. It is the one change that wants the boss fight played before it is trusted |
+| **`Q`, `E` and `R` are edges now** | The judgement call this plan said to decide rather than let the rename decide. They were level-triggered behind a cooldown, so holding a key re-fired the instant it ended; `JustPressed` is one press, one action. It is a change a player feels, and swapping `JustPressed` for `Down` puts it back. `handleAction2` keeps its state bit, which was never about the edge — it locks the hero's facing while `E` is held |
+| **`AnimationFrameDuration` stayed load-bearing** | The migration did not take on per-frame durations: `Engine.Sheets` is left empty, so the grid and its single duration are what the game still runs, and the melee hit window at frames 4 to 6 still means 400 to 700 ms. What did change is the *last* frame test — `e.Animation.FrameCount-1` rather than a literal 7, because `FrameCount` is a knob the `M` menu can move and a literal would leave the swing never ending |
+| **Two menus, one keyboard** | The game binds `P`, the engine binds `M`, and the engine takes the keyboard while its own menu is open — so the game's menu freezes underneath rather than double-stepping. Recorded in the commit so nobody "fixes" it |
+| **The game's state bits start at 16** | Confirmed: the engine claims bits 0 to 13 and reserves 14 and 15, so `stateAction1 = 1 << 16` is still clear |
 
-No longer a parking lot: `main.go` addresses the player as entity 0 throughout,
-which used to mean deleting any entity below it silently repointed it. A delete
-moves nothing now, so entity 0 stays entity 0 — see *Two changes networking
-needs*. Worth checking the template for the opposite assumption instead: code
-that iterates `for i := range e.State` now has to skip the holes with
-`e.Live(i)`, and code that reads `e.Count()` as the iteration bound wants
-`e.Slots()`.
+Two things fell out that the plan did not list.
+
+**The floor moved to layer -1**, which is the lab's lesson applied before it
+could bite. Nothing in the game stood on layer 0, so the tilemap at 0 was safe
+as written — but `wisp.Sprite{}` leaves `Z` at zero, and inside a layer the draw
+order is by baseline, so the next entity somebody adds without a `Z` would be
+painted over by every tile below its middle. Putting the floor under the default
+makes the default safe.
+
+**The six hit-stop and shake literals are three named strengths.**
+`e.Impact(e.Feel.Heavy)` announces the boss, `.Medium` is the boss taking a hit
+and the hero taking one, `.Light` is a monster dying. Three of the six landed on
+numbers `Defaults` already carries; the others moved a little and every one of
+them is now a knob rather than a literal:
+
+| Call site | Was | Is |
+|---|---|---|
+| the boss arrives | 10 px for 1000 ms, no stop | `Feel.Heavy` — 10 px for 400 ms, 150 ms stop |
+| the boss takes a hit | 4 px for 150 ms, 70 ms stop | `Feel.Medium` — 4 px for 150 ms, 100 ms stop |
+| the hero is hurt | 4 px for 150 or 200 ms, 150 or 100 ms stop | `Feel.Medium`, one answer for both call sites |
+| a monster dies | 70 ms stop, no shake | `Feel.Light` — and a kill now looks like something |
+| the melee dash | 2.5 px for 100 ms | `Feel.Light`'s shake alone, no stop: the stop belongs on the connect, not the wind-up |
+
+`PlaySound` and `PlayMusic` split the way they had to. The music was
+`PlaySound(index, 0.25, true)` every frame; it is `e.PlayMusic(index, 1)` now,
+and the 0.25 is `Audio.MusicVolume` — which means the volume is a knob too.
+
+Every loop over the entity arrays takes `e.Slots()` and skips with `e.Live(i)`.
+The game deletes nothing, so it has no holes to skip and the checks never fire —
+but a template is copied, and `len(e.State)` is the habit the free list broke.
+
+### What it cost, and where the bytes went
+
+**411,182 bytes, up from 309,329** — the same TinyGo 0.42 and `wasm-opt -Oz` on
+both, the old tree rebuilt from a worktree rather than trusting the committed
+file. Per package, before `wasm-opt`: `internal/engine` 17,447 becomes
+`wisp-engine` 58,878, and the standard library it pulls adds `internal/strconv`
++5,746, `strings` +4,288 and `slices` +2,924 for the settings text format.
+
+`strings` over the unstripped module says which half of the engine is actually
+in there. `ParseSheet` and `GridSheet` are gone, dropped by the linker the way
+they are in the lab. `newMenu`, `drawMetrics`, `GoLiteral` and `UnmarshalText`
+are all present: about 100 KB of tuning menu, settings format and metrics
+overlay, in a build that ships a game.
+
+That is the trade, and it was taken deliberately: the template now hands you a
+game you can press `M` on and tune, which is the whole point of the engine
+underneath it. **The follow-up it earns, if the number ever matters:** a
+`wisp_release` build tag over `menu.go`, `knobs.go`, `metrics.go` and the
+settings text format, so a shipped game strips what only a developer looks at.
+It splits the code path in two and every gate would have to run both ways, so it
+is a milestone rather than a tidy-up, and it is not started.
+
+The template's README said "a 300 KB WASM binary" and that claim had rotted the
+moment the engine moved. It says 400 KB now, and `make wasm` there ends with a
+size check against `WASM_MAX_BYTES = 430000` — the same lesson as *Fixes on the
+first real run*: a claim nothing checks is a memory.
+
+### Still open
+
+**Nobody has played it.** Every gate is green and the module builds, but "the
+game still plays" is the template's own *Done means* and it needs a browser:
+`make wasm`, `make run`, then clear the arena and take the boss's ten lives at
+<http://127.0.0.1:8080/>. What to watch for is the hit box — it moved six pixels
+— and whether `Q` on an edge rather than a level reads as better or worse.
 
 ## Networking — milestone 7, not started
 
@@ -1041,8 +1098,10 @@ compiles everywhere.
   WebGL2 renderer, where the shader gives them almost for free.
 - **No `devicePixelRatio` handling**, deliberately. A fixed 640x360 backing store
   is what makes the lab's frame times comparable between machines.
-- **`game-jam-template` is untouched** and still carries its own copy of the
-  engine.
+- **No release build of the engine.** `game-jam-template` ships the tuning
+  menu and the metrics overlay inside its game, which is about 100 KB it never
+  shows a player. A build tag would strip them; see *Migrating
+  `game-jam-template`*.
 
 ## Baseline rules waived, on the record
 
@@ -1079,6 +1138,7 @@ Conformance notes worth repeating here:
 - **`context.Context` is not the first parameter of `Engine.Run`**, the only call
   that blocks. The browser owns the frame loop's lifetime and nothing on the Go
   side can cancel it; `Engine.Stop` is the handle the rule wants.
-- **The library checklist's first box is still unchecked.** *A second project
-  actually imports this* is what milestone 6 is for. Until then this is an
-  extraction with one consumer, which is the shape the rule exists to catch.
+- **The library checklist's first box is checked.** *A second project actually
+  imports this*: `game-jam-template` requires v0.1.0 and its own gates are
+  green against it. That is what turned this from an extraction with one
+  consumer — the shape the rule exists to catch — into a module.
