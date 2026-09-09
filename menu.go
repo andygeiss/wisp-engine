@@ -259,6 +259,17 @@ const (
 	menuRows    = 18
 	menuWidth   = 232.0
 	menuMarkerX = 6.0
+
+	// menuCols is how many characters of menuFont fit between the panel's
+	// padding, and it is counted rather than measured: the canvas can measure
+	// text but the headless twin cannot, so a width the tests can check has to
+	// be arithmetic. 232 - 2*8 leaves 216 px, and the budget is taken against
+	// the widest advance ui-monospace resolves to rather than the narrowest —
+	// Menlo's 0.6023em over SF Mono's 0.6em, which is 29 characters and not
+	// 30. A line that overruns is not clipped to the panel: the panel sits on
+	// the right edge, so the overrun is drawn off the canvas and simply
+	// disappears.
+	menuCols = 29
 )
 
 // draw paints the menu over the running scene. It uses the two primitives the
@@ -336,5 +347,6 @@ func (m *menu) footer(e *Engine) string {
 	return b.String()
 }
 
-// hint is the one line of key help the menu always shows.
-func (m *menu) hint() string { return "←→ adjust  ⇧ x10  C copy  T test" }
+// hint is the one line of key help the menu always shows. It has to fit
+// menuCols, which is why it is this terse; TestMenuTextFits pins it.
+func (m *menu) hint() string { return "←→ tune  ⇧ x10  C copy  T hit" }

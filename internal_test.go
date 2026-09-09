@@ -1,6 +1,9 @@
 package wisp
 
-import "testing"
+import (
+	"testing"
+	"unicode/utf8"
+)
 
 // drawOrder is the one thing a consumer cannot reach, so its test lives here.
 // Everything else is tested from package wisp_test, the way a game sees it.
@@ -306,5 +309,84 @@ func TestFullscreenDebounce(t *testing.T) {
 	// would push the next toggle further away with every frame.
 	if !e.allowFullscreen(2000) {
 		t.Error("allowFullscreen(2000) = false, want true: a refusal must not restart the debounce")
+	}
+}
+
+func TestTilemapBelowStaysBelow(t *testing.T) {
+	t.Parallel()
+	// A floor on its own layer must never draw over an actor standing on it,
+	// however far down the screen the tile sits. Sharing one layer does not
+	// achieve that: within a layer the order is by baseline, so the tiles
+	// below an actor's middle would repaint its lower half.
+	e := New(Config{})
+	e.AddTilemap(Tilemap{
+		Cols: 4, Height: 32, Rows: 4, TilesetCols: 3, TilesetRows: 5,
+		Tiles: []int{4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+		Width: 32, Z: -1,
+	})
+	tiles := e.Count()
+	// In the middle of the floor, so tiles sit both above and below it.
+	actor := e.Add(Sprite{Height: 32, State: StateVisible, Width: 32, X: 48, Y: 48, Z: 0})
+
+	e.sortDrawOrder()
+
+	seen := 0
+	for _, i := range e.drawOrder {
+		if i == actor {
+			if seen != tiles {
+				t.Fatalf("actor drew after %d of %d tiles, want all %d", seen, tiles, tiles)
+			}
+			return
+		}
+		seen++
+	}
+	t.Fatal("actor never drew")
+}
+
+func TestMenuTextFits(t *testing.T) {
+	t.Parallel()
+	// The panel is pinned to the right edge of the canvas, so a line wider
+	// than the panel is not clipped to it — it is drawn off the canvas and
+	// its tail is simply not there. The hint line lost "st" that way.
+	e := New(Config{})
+	m := &e.menu
+	m.layout()
+
+	fixed := []string{
+		"Tune  ·  M closes", // the title, as draw writes it
+		m.hint(),
+		"Enter opens a group",
+		"Enter toggles",
+		"reset everything",
+		"copied as Go",
+		"saved",
+	}
+	for _, s := range fixed {
+		if n := utf8.RuneCountInString(s); n > menuCols {
+			t.Errorf("%q is %d columns, over the %d that fit", s, n, menuCols)
+		}
+	}
+
+	// The footer and the status also carry a knob's own numbers and name, so
+	// a wide range or a long field can overrun where a fixed string does not.
+	for i, k := range m.table {
+		m.rows, m.sel = []row{{Index: i, Kind: rowKnob}}, 0
+		if s := m.footer(e); utf8.RuneCountInString(s) > menuCols {
+			t.Errorf("footer for %s.%s is %q, %d columns, over %d",
+				k.Group, k.Field, s, utf8.RuneCountInString(s), menuCols)
+		}
+		if s := "reset " + k.Field; utf8.RuneCountInString(s) > menuCols {
+			t.Errorf("status %q is %d columns, over %d", s, utf8.RuneCountInString(s), menuCols)
+		}
+	}
+
+	// A knob row insets the field by a further 18 px and right-aligns its
+	// value at the far edge, which costs it about three of those columns.
+	const rowCols = menuCols - 3
+	for _, k := range m.table {
+		line := k.Field + " " + k.text(&e.Settings)
+		if n := utf8.RuneCountInString(line); n > rowCols {
+			t.Errorf("row %q is %d columns, over the %d a knob row has", line, n, rowCols)
+		}
 	}
 }

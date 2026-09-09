@@ -37,6 +37,10 @@ const (
 	worldW     = tilesCols * tileSize
 	worldH     = tilesRows * tileSize
 
+	// zFloor is below every layer spawn uses, so the floor never draws over an
+	// actor standing on it.
+	zFloor = -1
+
 	// spawnBatch is how many sprites one press adds. Shift multiplies it by
 	// ten, so walking the count up to the ceiling takes a few seconds rather
 	// than a few minutes.
@@ -96,9 +100,13 @@ func build(e *wisp.Engine) {
 	for i := range tiles {
 		tiles[i] = 4 // the floor tile of the template's tileset
 	}
+	// The floor goes below every actor. Sharing a layer with them would not
+	// hide it behind them: inside one layer the sort is by baseline, so each
+	// tile below a sprite's middle draws after it and repaints its lower half.
 	e.AddTilemap(wisp.Tilemap{
 		Cols: tilesCols, Height: tileSize, Image: imageTiles, Rows: tilesRows,
 		Tiles: tiles, TilesetCols: tilesetCol, TilesetRows: tilesetRow, Width: tileSize,
+		Z: zFloor,
 	})
 
 	player = e.Add(wisp.Sprite{

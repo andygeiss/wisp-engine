@@ -4,6 +4,11 @@
 This file is both the plan and the record — what was decided, what was built,
 what changed while building it, and what is left.
 
+**The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
+`make wasm` produces a 228 KB module, every gate is green including the two
+that need the network, and the scene has rendered in a browser. That first run
+is what turned up the floor-layer bug in *Fixes on the first real run*.
+
 ## Context
 
 `game-jam-template` already contained an engine, and its own pause screen
@@ -46,7 +51,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42 — 309 KB is the number to protect. All overlay UI is drawn on the
+  TinyGo 0.42 — 309 KB is the number to protect; the module measures 228 KB. All overlay UI is drawn on the
   canvas, never as DOM, so it survives fullscreen. `game-jam-template` is not
   touched until the last milestone.
 - **Done means:** `make check` and `make ci` are green; the library checklist is
@@ -73,17 +78,24 @@ Two follow-ups, each gated on evidence rather than scheduled:
 
 ### Gates
 
-Green: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`, `go fix -diff`,
-`go mod tidy -diff`, `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`.
-36 test functions, 97 assertions passing, one fuzz target with its seeds.
+Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
+`go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
+`go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
+list against the commit and is green too. 41 test functions: 36 tests, four
+examples, and one fuzz target with its seeds.
 
-**Never run, and both matter:**
+`make wasm` has run. `web/static/lab.wasm` is committed at 233,741 bytes — 228
+KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
 
-- `staticcheck` and `govulncheck`. The machine this was built on had no network,
-  and both are fetched from the module proxy on every run.
-- `make wasm`. TinyGo and `wasm-opt` are not installed, so **nothing has been
-  compiled by TinyGo and nothing has rendered in a browser.**
-  `web/static/lab.wasm` does not exist; the server names it as missing at boot.
+**`staticcheck` needed a fix before it would pass, and it was not noise.**
+`fullscreenAt` and `claimsKey` are reached only from `runtime_js.go`, so the
+host build saw them as unused (U1000) on correct code. The `go vet` trick does
+not extend to it: `go run tool@latest` under `GOOS=js` builds the tool for that
+target as well, and a js/wasm `staticcheck` binary cannot execute, so there is
+no second line to add. Both are exercised on the host instead — which is what
+`host.go` exists for — and the fullscreen debounce moved out of
+`toggleFullscreen` into `Engine.allowFullscreen`, so the rule can be tested
+where there is no fullscreen to ask for.
 
 ## Decisions taken
 
@@ -99,42 +111,42 @@ Green: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`, `go fix -diff`,
 
 ```
 wisp-engine/
-├── assets/                  the .aseprite sources; `make sheet` exports them
+├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            140 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      282 the playground (js && wasm)
+│   ├── lab/main.go      290 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
 ├── doc.go                54 the package doc
-├── engine.go            308 Engine, Config, New, Step, Impact, HitStop, Shake
-├── entity.go            212 Sprite, Tilemap, Add, Delete, BoundingBox, Reset
+├── engine.go            321 Engine, Config, New, Step, Impact, HitStop, Shake
+├── entity.go            215 Sprite, Tilemap, Add, Delete, BoundingBox, Reset
 ├── example_test.go       72 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
-├── internal_test.go     253 draw order, the frame ring, the clipboard
+├── internal_test.go     392 draw order, layering, menu widths, the frame ring
 ├── knobs.go             321 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
-├── Makefile                 baseline Makefile + sheet and wasm targets
-├── menu.go              340 the M overlay, canvas-drawn
+├── Makefile                 baseline Makefile + sheets and wasm targets
+├── menu.go              352 the M overlay, canvas-drawn
 ├── metrics.go           301 the frame ring, percentiles, the H overlay
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
 ├── render.go            111 Run, Stop, Rect, Text, sound, the frame's paint
-├── runtime_js.go        466 canvas, events, audio, rAF loop (js && wasm)
+├── runtime_js.go        464 canvas, events, audio, rAF loop (js && wasm)
 ├── settings.go          203 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
 ├── state.go             191 the state bits, movement, animation, draw order
 ├── web/
-│   ├── static/              app.css, wasm_app.js, the art, (lab.wasm)
+│   ├── static/              app.css, wasm_app.js, the art, lab.wasm
 │   └── templates/index.html the host page
 └── wisp_test.go         833 the consumer's view: entities, camera, input, menu
 ```
 
-2,318 lines of engine that build anywhere, 581 behind the browser tag, 1,581 of
-tests, 512 of lab and server.
+2,346 lines of engine that build anywhere, 579 behind the browser tag, 1,720 of
+tests, 520 of lab and server.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -198,6 +210,30 @@ Nine, each with the test that pins it.
 | `camBoundsSet` was initialised `true` and never set false. | Deleted. The clamp always runs, which is what the flag pretended to gate. |
 | Games hand-cleared key bools (`engine.KeyN = false`) — the most-copied boilerplate. | `JustPressed` and `JustReleased`, cleared by `Step`. A press and release inside one frame still reports both edges, which a `down`/`prev` pair would lose. |
 | `F` was stolen for fullscreen before a game saw it, and `preventDefault` fired on every event including `mousemove`. | `Config.FullscreenKey` and `Config.MenuKey`, either of which takes `KeyNone`. Only a key the engine claims is swallowed; `mousemove` never is. Auto-repeat no longer counts as a new press. |
+
+## Fixes on the first real run
+
+Four, from installing TinyGo and opening the page for the first time. Every
+one of them was invisible to `make check`, because a green gate says nothing
+about a tree nobody serves, a scene nobody looks at, or a line of text nobody
+measures.
+
+| Fix | What happened |
+|---|---|
+| `GET /static/js/wasm_exec.js` answered 404, and `make wasm` had never produced anything. `sheets` and `wasm` wrote under `cmd/serve/web/static/`, a directory that does not exist — so the target died on its first `cp`, silently, every time. | Both targets now write to `web/`, the tree `cmd/serve` actually reads and where the committed art already lived. It is also where the baseline's `go-project-layout.md` puts it. |
+| `WASM_MAX_BYTES` was declared and never read. Its own comment called it "the headline number, as a gate", and the `wasm` target's said "the size check is last" — but nothing compared anything. | The target's last line is the comparison. A claim nothing checks is a memory, including this one. |
+| **The menu's hint line was cut off at the right border**, showing "T te" for "T test". | The panel is pinned to the canvas's right edge and its text is left-aligned inside it, so a line wider than the panel is not clipped to the panel — it is drawn past the edge of the canvas and its tail is gone. The hint was 32 characters where 29 fit. `menuCols` now states the budget with its arithmetic, the hint is `←→ tune  ⇧ x10  C copy  T hit`, and `TestMenuTextFits` checks every fixed string, every knob's footer and every knob row against it, counting runes rather than bytes — `←` is three bytes and one column. |
+| **The floor drew over the sprites.** About a third of every spawned batch came out with its lower half repainted by the tiles under it, which reads on screen as sprites that are clipped and half transparent. | `AddTilemap` was called without `Z`, so 960 floor tiles landed on layer 0 — and `spawn` picks `Z` from `rand.IntN(3)`, so one sprite in three joined them there. Inside a layer the sort is by baseline, so every tile below a sprite's middle draws after it. The floor moved to `zFloor = -1`. `TestTilemapBelowStaysBelow` pins it, and fails with 8 of 16 tiles on top when the layer is shared. |
+
+The floor is the one worth remembering: the engine was right at every step. The
+painter's sort, the alpha cache, the viewport cull and the grid arithmetic all
+did exactly what they promise. It was the *scene* that put a floor and its
+actors on one layer, and no amount of engine testing would have found it.
+
+The transparency in that scene is not a bug and was never one: `spawn` asks for
+`Alpha: 0.6 + rand.Float64()*0.4`, so every spawned sprite is 60 to 100 per
+cent opaque on purpose. It is what made the overdraw look like a rendering
+fault rather than a layering one.
 
 ## `Settings` — the point of the project
 
@@ -374,7 +410,8 @@ waits a second first: the frames right after a reset are always slow, and ending
 on those would report a ceiling of zero.
 
 That number is the evidence that decides whether the WebGL2 batcher is worth
-writing. **Nobody has produced it yet** — it needs TinyGo and a browser.
+writing. TinyGo and a browser are no longer the blocker — both are here, and
+the scene renders. **The number itself has still not been written down.**
 
 ## Aseprite sheets — milestone 5, not started
 
@@ -448,10 +485,9 @@ checks is a memory.
 
 ## Verification
 
-Three tiers, because two of the tools are not on this machine.
+Three tiers. All three tools are on this machine now, so all three tiers run.
 
-**No extra tools — `make check`.** Green, except the two gates that need the
-network. It proves the entity store, the camera, the state machine, the settings
+**No extra tools — `make check`.** Green, the two network gates included. It proves the entity store, the camera, the state machine, the settings
 defaults, the knob table's coverage, the menu's whole keyboard, the frame
 statistics and the lab server. Four tests earn their place:
 
@@ -468,8 +504,8 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** It prints the byte count and fails above
-the budget, so the 309 KB claim cannot rot. Also settle the `ReadMemStats`
+**With TinyGo installed — `make wasm`.** Done: 233,741 bytes, against a 320,000
+gate that now actually runs, so the size claim cannot rot. Also settle the `ReadMemStats`
 question before trusting the heap row, and use
 `tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` to see which
 package spends the bytes.

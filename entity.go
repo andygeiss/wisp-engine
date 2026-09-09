@@ -82,7 +82,10 @@ type Tilemap struct {
 	Tiles []int
 	// Width of one tile in pixels.
 	Width float64
-	// Z is the draw layer every tile lands on.
+	// Z is the draw layer every tile lands on. A floor belongs below the
+	// entities that stand on it: inside one layer the draw order is by
+	// baseline, so a tile sharing a layer with an actor draws over it
+	// whenever the tile sits lower down the screen.
 	Z int
 }
 
