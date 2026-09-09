@@ -73,6 +73,8 @@ open and press keys in.
 Two follow-ups, each gated on evidence rather than scheduled:
 
 - **A WebGL2 batched renderer**, if and when the number `B` produces is too low.
+  It is not: `B` reports 33,627 sprites at 60 fps. See *The lab* for what that
+  number does and does not include.
 - **A native backend** for true OS-level CPU, RAM and GPU numbers. A whole
   second platform layer, and a large one.
 
@@ -412,11 +414,30 @@ waits a second first: the frames right after a reset are always slow, and ending
 on those would report a ceiling of zero.
 
 That number is the evidence that decides whether the WebGL2 batcher is worth
-writing. TinyGo and a browser are no longer the blocker, and neither is the
-ramp: it used to stop on its first check at zero sprites and show nothing,
-because it compared the 99th percentile against the middle of the window. It
-now stops on a frame the display actually missed. **The number itself has
-still not been written down.**
+writing, and it has now been produced.
+
+**The ceiling is 33,627 spawned sprites at 60 fps**, on Canvas2D, on the
+machine this was built on. That is far past what the follow-up was written to
+protect against, so **the WebGL2 batcher is not worth writing yet** — the
+evidence says the renderer is not the thing standing in a game's way.
+
+Two things qualify the number, and both point the same way:
+
+- **It counts entities, not draws.** The world is 1280x768 and the canvas is
+  640x360, so a quarter of it is on screen: at the ceiling roughly 34,600
+  entities exist and something near 8,100 of them are actually painted. The
+  overlay's *entities / drawn* row has the real pair; the ramp reports the
+  left-hand one.
+- **`drawMs` is not the renderer.** `Engine.draw` starts its clock before
+  `sortDrawOrder`, so the number called *draw* is the sort plus the draw plus
+  the game's own `RenderUI`. At 34,600 entities the stable sort is around half
+  a million comparisons a frame, thirty million a second, and none of that is
+  Canvas2D. A renderer swap would not touch it.
+
+So the ceiling is a floor on what the whole frame can carry, not a measurement
+of what Canvas2D can carry — and the second is what the WebGL2 question
+actually asks. Timing `sortDrawOrder` apart from `drawEntities` is the next
+thing to do if that question is ever reopened.
 
 ## Aseprite sheets — milestone 5, not started
 
@@ -530,8 +551,9 @@ package spends the bytes.
    because the entity slices keep their capacity. If it is a constant,
    `ReadMemStats` is not filling `HeapAlloc` under TinyGo — delete the row rather
    than ship it.
-6. `B` — the ramp. Write down the sprite count where it stops. That is the
-   Canvas2D ceiling, and the WebGL2 decision.
+6. `B` — the ramp. Write down the sprite count where it stops. Done: 33,627,
+   which settles the WebGL2 decision for now. It adds 100 a second, so a
+   ceiling that high takes about six minutes to reach.
 7. `F` — fullscreen. The overlay and the menu are still there, because they are
    drawn inside the canvas. Anything that disappears was in the DOM.
 
