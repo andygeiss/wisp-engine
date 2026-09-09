@@ -1,9 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
 **Status: milestones 1 to 6 are built and green. 7 is under way: steps 1 to
-3 of 9 are built — the three engine hooks, the wire and the socket — and so is
-the hit-box half of step 0; the other half of step 0, looking at the blend, is
-still open.** This file is both the plan and the record — what was decided, what was
+4 of 9 are built — the three engine hooks, the wire, the socket and the lab's
+rules — and so is the hit-box half of step 0; the other half of step 0,
+looking at the blend, is still open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -27,7 +27,7 @@ checklist's first box is checked at last. *Migrating `game-jam-template`* is
 the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
-`make wasm` produces a 235 KB module, every gate is green including the two
+`make wasm` produces a 236 KB module, every gate is green including the two
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
 
@@ -82,7 +82,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42; the module measures 235 KB against a 320,000-byte gate. All
+  TinyGo 0.42; the module measures 236 KB against a 320,000-byte gate. All
   overlay UI is drawn on the canvas, never as DOM, so it survives fullscreen.
   309 KB was the number to protect in `game-jam-template`, and it was not
   protected: importing the module took that game to 411 KB. See *Migrating
@@ -104,7 +104,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — steps 1 to 3 of 9 are built, the three engine hooks, the wire and the socket, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — steps 1 to 4 of 9 are built, the three engine hooks, the wire, the socket and the lab's rules, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -154,13 +154,14 @@ examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 241,040 bytes — 235
+`make wasm` has run. `web/static/lab.wasm` is committed at 242,081 bytes — 236
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
 free list and the fixed tick cost 586 bytes of that between them, the sheet
 2,615 more, and the blend between two ticks 1,972; the three hooks of
 milestone 7 then took 36 off, because folding the movement into one function
-gave the compiler back more than the new branch cost, and the hit-box overlay
-put 1,607 on. `ParseSheet` is not
+gave the compiler back more than the new branch cost, the hit-box overlay put
+1,607 on, and moving the solo scene onto `internal/lab` 1,041 more.
+`ParseSheet` is not
 among those 2,615: the lab builds its sheet with `GridSheet`, so the scanner is
 dead code the linker drops.
 
@@ -208,6 +209,8 @@ wisp-engine/
 ├── host_test.go          48 what the headless twin recorded, read back
 ├── input.go             133 key state, edge detection, the menu's lock
 ├── internal/
+│   ├── lab/lab.go         382 the rules both halves share: skills, bouncers, the floor
+│   ├── lab/lab_test.go    247 the cooldown gate, the strike, the cap, the dash, the bounce
 │   ├── wire/wire.go       416 the ten messages and their bytes
 │   ├── wire/wire_test.go  197 round trips, the four refusals, the fuzz target
 │   ├── ws/frame_test.go    64 the RFC's key, and the fuzz target over the reader
@@ -890,8 +893,8 @@ its frames really are a grid. A game with a packed or per-frame-timed sheet
 parses the export; the engine cannot tell the two apart, and that is the point.
 
 The consequence to be honest about: **`ParseSheet` is dead code in
-`lab.wasm`**, dropped by the linker, so the module's 241,040 bytes do not price
-the scanner. A game that parses an export pays for it, and the 78,960 bytes of
+`lab.wasm`**, dropped by the linker, so the module's 242,081 bytes do not price
+the scanner. A game that parses an export pays for it, and the 77,919 bytes of
 headroom are where it comes from.
 
 ### Still open
@@ -966,7 +969,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 241,040 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 242,081 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
 read it against *Gates*, which is updated with the build rather than by hand.
@@ -1192,8 +1195,8 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 | WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
 | WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
 
-The engine's own numbers for scale: `web/static/lab.wasm` is 241,040 bytes
-against a 320,000 gate, so 78,960 bytes of headroom and the client half wants
+The engine's own numbers for scale: `web/static/lab.wasm` is 242,081 bytes
+against a 320,000 gate, so 77,919 bytes of headroom and the client half wants
 about 12% of it. That headroom is the lab's. A game carries its own code as
 well — `game-jam-template` is at 411 KB with no gate of this module's to sit
 under — so the 10 KB ceiling is a promise about the engine's half and not
@@ -1457,6 +1460,24 @@ Tests: a second press inside the cooldown does nothing; a strike takes only
 the bouncers that overlap; a spawn past the cap adds none; a dash ends on its
 own tick; the bounce turns around at the world's edge.
 
+**Built, and the solo scene runs on it.** `internal/lab` holds the constants
+`cmd/lab` used to keep for itself — the images, the rows, the sheet's shape,
+the world and its layers — and three things that are rules. `Player` is one
+player's cooldowns and dash: `Fire` honours a press only when that skill's
+cooldown is at zero, and `Tick` runs the cooldowns and the dash down and keeps
+the player inside the world. `Bouncers` is the crowd, a velocity each: its
+`Simulate` is the bounce that used to live in `cmd/lab`, and its `Struck` is
+the strike. `Setup`, `BuildFloor` and `ClampToWorld` are the parts of the
+scene both halves build. `cmd/lab` lost 113 lines to it and spawns, despawns
+and bounces through `Bouncers` now, so the sprites the ramp measures are
+moved by the very code the server will move them by. Two small things were
+decided while writing it: a spawn at the cap still fires and starts its
+cooldown, because the gate is about the press and the cap is about the world;
+and a dash sets `SpeedFactor`, so the engine's own movement carries it and
+the snapshot never has to. Ten tests, the five above among them. It cost the
+module 1,041 bytes, 241,040 to 242,081 — the price of the shared package in a
+build that does not yet talk to anybody.
+
 ### The client — `cmd/lab` and `internal/replica`
 
 - **Two modes, one module.** `?solo` in the URL is today's scene — the
@@ -1553,7 +1574,7 @@ Each step is green on its own and is its own commit.
    close, the length lie, ping and pong, the control-frame rules; a fuzz target
    over the frame reader — **done**.
 4. **`internal/lab`**: the skills, the cap, the dash timer, the bounce, and
-   their tests.
+   their tests — **done**.
 5. **`cmd/serve`**: `config.go`, `slog`, the hub, `world.Tick`, `/ws`,
    shutdown, and the `-race` tests over `net.Pipe`.
 6. **`internal/replica`**: the slot map, the ordered queue, hold, fast-forward
