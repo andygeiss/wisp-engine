@@ -73,8 +73,12 @@ var (
 	// rampCeiling is -1 until a ramp has finished, so that a ceiling of zero
 	// is a result the lab shows rather than one it hides.
 	rampCeiling = -1
-	ramping     bool
-	settled     float64
+	// rampDrawn is how many of those the camera actually painted. The world is
+	// four times the canvas, so most of the spawned sprites are off-screen and
+	// culled: the ceiling on its own overstates what the renderer carried.
+	rampDrawn int
+	ramping   bool
+	settled   float64
 )
 
 func main() {
@@ -100,7 +104,7 @@ func main() {
 func build(e *wisp.Engine) {
 	e.Reset()
 	vx, vy = vx[:0], vy[:0]
-	ramping, rampAt, rampCeiling, settled = false, 0, -1, 0
+	ramping, rampAt, rampCeiling, rampDrawn, settled = false, 0, -1, 0, 0
 
 	tiles := make([]int, tilesCols*tilesRows)
 	for i := range tiles {
@@ -216,7 +220,7 @@ func startRamp(e *wisp.Engine) {
 	}
 	despawn(e, e.Count()-first)
 	e.Debug.ShowMetrics = true
-	ramping, rampAt, rampCeiling, settled = true, 0, -1, 0
+	ramping, rampAt, rampCeiling, rampDrawn, settled = true, 0, -1, 0, 0
 }
 
 // ramp adds sprites until the near-worst frame in the window crosses the
@@ -241,6 +245,7 @@ func ramp(e *wisp.Engine, dt float64) {
 	if s.P99Ms > s.Late {
 		ramping = false
 		rampCeiling = e.Count() - first
+		rampDrawn = s.Drawn
 		return
 	}
 	rampAt += dt
@@ -265,7 +270,10 @@ func renderUI(e *wisp.Engine) {
 	case ramping:
 		status += "   ramping..."
 	case rampCeiling >= 0:
-		status += "   ceiling " + itoa(rampCeiling) + " at 60 fps"
+		// Both numbers, because they are far apart and the second is the one
+		// the renderer actually paid for.
+		status += "   ceiling " + itoa(rampCeiling) + " spawned, " +
+			itoa(rampDrawn) + " drawn at 60 fps"
 	}
 	e.Text(8, e.Height-24, status, "white", font, "left")
 	e.Text(8, e.Height-10,

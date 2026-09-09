@@ -74,7 +74,10 @@ test:
 # README says how to install them. wasm_exec.js is copied from TinyGo because
 # it must match the compiler that built the module. The optimized file is the
 # one cmd/serve serves, and it is committed so a fresh clone runs. The size
-# check is last, because 309 KB is the claim this engine makes.
+# check is last, because the module's size is the claim this engine makes. It
+# builds to about 228 KB against the 320 KB gate above; the gate is the claim,
+# not this comment, which is why the number here is approximate and the one in
+# WASM_MAX_BYTES is not.
 wasm:
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" web/static/js/wasm_exec.js
 	mkdir -p bin

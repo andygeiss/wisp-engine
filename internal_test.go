@@ -479,3 +479,46 @@ func TestBudgetFallsToTheTrueInterval(t *testing.T) {
 		t.Errorf("budget stayed at %v after the scene settled to 16.67, want it to fall", got)
 	}
 }
+
+func TestLoadStillCountsTheSort(t *testing.T) {
+	t.Parallel()
+	// The sort is real frame time. Pulling it out of DrawMs, so that the draw
+	// number means the renderer alone, must not drop it from the load figure —
+	// or the frame would look cheaper than it is for having been measured
+	// more precisely.
+	e := New(Config{})
+	m := &e.metrics
+	for range metricsWindow {
+		m.add(20.0)
+	}
+	m.updateMs, m.sortMs, m.drawMs = 1, 2, 4
+
+	s := e.Stats()
+	if s.SortMs != 2 || s.DrawMs != 4 {
+		t.Fatalf("SortMs/DrawMs = %v/%v, want 2/4", s.SortMs, s.DrawMs)
+	}
+	want := (1.0 + 2.0 + 4.0) / s.Budget
+	if s.Load != want {
+		t.Errorf("Load = %v, want %v: the sort is missing from it", s.Load, want)
+	}
+}
+
+func TestSortAndDrawAreTimedApart(t *testing.T) {
+	t.Parallel()
+	// Both have to be recorded by a real frame, not just carried by Stats.
+	// The headless backend draws nothing, so the numbers are small; that they
+	// are set at all is the contract.
+	e := New(Config{})
+	for range 200 {
+		e.Add(Sprite{Height: 32, State: StateVisible, Width: 32, X: 10, Y: 10})
+	}
+	e.metrics.sortMs, e.metrics.drawMs = -1, -1
+	e.draw()
+
+	if e.metrics.sortMs < 0 {
+		t.Error("sortMs was never recorded by a frame")
+	}
+	if e.metrics.drawMs < 0 {
+		t.Error("drawMs was never recorded by a frame")
+	}
+}

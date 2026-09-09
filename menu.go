@@ -334,9 +334,14 @@ func (m *menu) footer(e *Engine) string {
 	if len(m.rows) == 0 || m.rows[m.sel].Kind != rowKnob {
 		return "Enter opens a group"
 	}
+	// resetHint rides on the knob rows because that is where Backspace does
+	// something: on a group row it only works with Shift, which resets the
+	// whole set. It is here rather than in hint because hint is already at
+	// its full width, and there is room to spare on this line.
+	const resetHint = "  ⌫ reset"
 	k := m.table[m.rows[m.sel].Index]
 	if k.Kind == knobBool {
-		return "Enter toggles"
+		return "Enter toggles" + resetHint
 	}
 	var b strings.Builder
 	b.WriteString(trimFloat(k.Min))
@@ -344,6 +349,7 @@ func (m *menu) footer(e *Engine) string {
 	b.WriteString(trimFloat(k.Max))
 	b.WriteString("  step ")
 	b.WriteString(trimFloat(k.Step))
+	b.WriteString(resetHint)
 	return b.String()
 }
 

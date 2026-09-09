@@ -66,6 +66,12 @@ type Stats struct {
 	// hides exactly the frames a player notices.
 	P50Ms float64
 	P99Ms float64
+	// SortMs is how long the last frame spent putting the entities in draw
+	// order. It is separate from [Stats.DrawMs] because the two answer
+	// different questions: the sort is a function of how many entities exist
+	// and a different renderer would not change it, while the draw is what a
+	// different renderer would replace.
+	SortMs float64
 	// UpdateMs is how long the last frame spent on the world.
 	UpdateMs float64
 	// WasmBytes is the module's own size, which is the number this engine
@@ -87,6 +93,7 @@ type metrics struct {
 	drawMs   float64
 	drawn    int
 	dropped  int
+	sortMs   float64
 	updateMs float64
 
 	// refresh is the display's own frame interval: the smallest window median
@@ -149,6 +156,7 @@ func (e *Engine) Stats() Stats {
 	s := Stats{
 		Budget:      m.budget(),
 		Late:        m.budget() * lateFrame,
+		SortMs:      m.sortMs,
 		DrawMs:      m.drawMs,
 		Drawn:       m.drawn,
 		Dropped:     m.dropped,
@@ -163,7 +171,7 @@ func (e *Engine) Stats() Stats {
 		s.FPS = 1000 / avg
 	}
 	if s.Budget > 0 {
-		s.Load = (m.updateMs + m.drawMs) / s.Budget
+		s.Load = (m.updateMs + m.sortMs + m.drawMs) / s.Budget
 	}
 	e.rt.hostStats(&s)
 	return s
@@ -225,7 +233,7 @@ func (e *Engine) drawMetrics() {
 	)
 	s := e.Stats()
 
-	rows := 7
+	rows := 8
 	h := float64(rows)*hudRowH + hudPad*3 + 26
 	e.Rect(0, 0, hudWidth, h, ground)
 
@@ -246,7 +254,10 @@ func (e *Engine) drawMetrics() {
 
 	line("fps", formatMillis(s.FPS), plain)
 	line("frame  p50 / p99", formatMillis(s.P50Ms)+" / "+formatMillis(s.P99Ms)+" ms", frameColor)
-	line("update / draw", formatMillis(s.UpdateMs)+" / "+formatMillis(s.DrawMs)+" ms", plain)
+	line("update", formatMillis(s.UpdateMs)+" ms", plain)
+	// Two numbers rather than one: a renderer swap moves the draw and leaves
+	// the sort exactly where it is, and that is the whole WebGL2 question.
+	line("sort / draw", formatMillis(s.SortMs)+" / "+formatMillis(s.DrawMs)+" ms", plain)
 	line("main thread", formatPercent(s.Load)+"  of "+formatMillis(s.Budget)+" ms", plain)
 	line("entities / drawn", itoa(s.Entities)+" / "+itoa(s.Drawn), plain)
 	line("go heap / wasm mem", formatBytes(s.GoHeapBytes)+" / "+formatBytes(s.WasmMemoryBytes), plain)

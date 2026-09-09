@@ -76,13 +76,21 @@ func (e *Engine) draw() {
 	}
 	t0 := e.rt.now()
 	e.sortDrawOrder()
+	// The sort is timed apart from the draw because they answer different
+	// questions. The sort costs what the entity count costs and a different
+	// renderer would not touch it; the draw is the part a different renderer
+	// replaces. Rolled together, the number cannot say which one a slow frame
+	// was spent on — which is exactly what the renderer decision asks.
+	t1 := e.rt.now()
 	e.rt.drawEntities(e)
 	if e.RenderUI != nil {
 		e.RenderUI()
 	}
 	// The overlays are timed separately and left out of drawMs, so the
 	// overlay never hides inside the number it is reporting.
-	e.metrics.drawMs = e.rt.now() - t0
+	now := e.rt.now()
+	e.metrics.sortMs = t1 - t0
+	e.metrics.drawMs = now - t1
 	e.metrics.drawn = e.rt.drawn
 
 	e.drawMetrics()

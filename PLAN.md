@@ -51,7 +51,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42 — 309 KB is the number to protect; the module measures 228 KB. All overlay UI is drawn on the
+  TinyGo 0.42 — 309 KB is the number to protect; the module measures 229 KB. All overlay UI is drawn on the
   canvas, never as DOM, so it survives fullscreen. `game-jam-template` is not
   touched until the last milestone.
 - **Done means:** `make check` and `make ci` are green; the library checklist is
@@ -73,8 +73,9 @@ open and press keys in.
 Two follow-ups, each gated on evidence rather than scheduled:
 
 - **A WebGL2 batched renderer**, if and when the number `B` produces is too low.
-  It is not: `B` reports 33,627 sprites at 60 fps. See *The lab* for what that
-  number does and does not include.
+  It is not: `B` reports 33,627 sprites at 60 fps. The overlay's *sort / draw*
+  row now splits the frame, so a rerun says how much of it a new renderer could
+  even reach.
 - **A native backend** for true OS-level CPU, RAM and GPU numbers. A whole
   second platform layer, and a large one.
 
@@ -83,10 +84,10 @@ Two follow-ups, each gated on evidence rather than scheduled:
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 45 test functions: 40 tests, four
+list against the commit and is green too. 47 test functions: 42 tests, four
 examples, and one fuzz target with its seeds.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 233,635 bytes — 228
+`make wasm` has run. `web/static/lab.wasm` is committed at 234,296 bytes — 229
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
@@ -116,7 +117,7 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            140 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      290 the playground (js && wasm)
+│   ├── lab/main.go      307 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
 ├── doc.go                54 the package doc
@@ -126,16 +127,16 @@ wisp-engine/
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
-├── internal_test.go     481 draw order, layering, menu widths, the frame ring
+├── internal_test.go     524 draw order, layering, menu widths, the frame ring
 ├── knobs.go             321 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
-├── menu.go              352 the M overlay, canvas-drawn
-├── metrics.go           331 the frame ring, percentiles, the H overlay
+├── menu.go              358 the M overlay, canvas-drawn
+├── metrics.go           342 the frame ring, percentiles, the H overlay
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
-├── render.go            111 Run, Stop, Rect, Text, sound, the frame's paint
+├── render.go            119 Run, Stop, Rect, Text, sound, the frame's paint
 ├── runtime_js.go        464 canvas, events, audio, rAF loop (js && wasm)
 ├── settings.go          203 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
@@ -147,8 +148,8 @@ wisp-engine/
 └── wisp_test.go         833 the consumer's view: entities, camera, input, menu
 ```
 
-2,376 lines of engine that build anywhere, 579 behind the browser tag, 1,809 of
-tests, 520 of lab and server.
+2,401 lines of engine that build anywhere, 579 behind the browser tag, 1,852 of
+tests, 537 of lab and server.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -434,10 +435,13 @@ Two things qualify the number, and both point the same way:
   a million comparisons a frame, thirty million a second, and none of that is
   Canvas2D. A renderer swap would not touch it.
 
-So the ceiling is a floor on what the whole frame can carry, not a measurement
-of what Canvas2D can carry — and the second is what the WebGL2 question
-actually asks. Timing `sortDrawOrder` apart from `drawEntities` is the next
-thing to do if that question is ever reopened.
+Both are now fixed rather than noted. `Stats.SortMs` times `sortDrawOrder`
+apart from `drawEntities`, so the overlay's *sort / draw* row says which of the
+two a slow frame went on — and only the second is the one a renderer swap would
+move. `Load` adds the sort back in, so measuring the frame more precisely does
+not make it look cheaper. The ramp records `Stats.Drawn` at the moment it
+stops, so the ceiling reports both numbers itself instead of leaving the
+reader to work the ratio out.
 
 ## Aseprite sheets — milestone 5, not started
 
@@ -530,7 +534,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 233,635 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 234,296 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. Also settle the `ReadMemStats`
 question before trusting the heap row, and use
 `tinygo build -target wasm -opt=z -size=full -o /dev/null ./cmd/lab` to see which
@@ -635,6 +639,12 @@ Four, in the README in the six-field format.
 
 Conformance notes worth repeating here:
 
+- **Nothing is embedded, and that is the rule rather than a deviation.** A
+  library ships no `main` package, no embedded assets and no CLI
+  (`project-types/library.md`); the layout pattern that *does* want a binary
+  carrying its own `web/` says in its opening line that it is for a web
+  application. Reading the tree from disk is compliance twice over, so the
+  fifth waiver this looked like it needed does not exist.
 - **The version is a digest of the served tree, not `debug.ReadBuildInfo`.** The
   assets are on disk, so the binary's identity says nothing about them. Hashing
   what is served is what the baseline's real rule — two builds with different

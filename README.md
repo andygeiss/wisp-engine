@@ -105,6 +105,9 @@ Two tools the gates do not need:
 ```bash
 brew install tinygo-org/tools/tinygo   # 0.42 or newer, for Go 1.27
 brew install binaryen                  # wasm-opt
+
+Built and measured with TinyGo 0.42.0 (LLVM 22.1.4) and binaryen 132. Neither
+is in the baseline's `VERSIONS.md`, so those two numbers live here.
 ```
 
 ## Commands
@@ -112,7 +115,7 @@ brew install binaryen                  # wasm-opt
 ```sh
 make          # every gate against the working tree
 make ci       # the same gates against the last commit
-make sheet    # export assets/*.aseprite to a sheet and its JSON
+make sheets   # export assets/*.aseprite to a sheet and its JSON
 make wasm     # compile the lab and copy the browser artefacts
 make run      # start the lab server
 make test     # go test -race -shuffle=on ./...
@@ -149,6 +152,13 @@ Four of its rules are waived here.
 
 Conformance notes, for the reader who checks the boxes:
 
+- **Nothing is embedded, and that is the rule rather than a deviation from it.**
+  `project-types/library.md` says a library ships no `main` package, no
+  embedded assets and no CLI; `patterns/go-project-layout.md`, which does want
+  a binary carrying its own `web/`, says in its own opening line that it is the
+  layout for a web application. So `cmd/serve` reading the tree named by `-dir`
+  is compliance twice over — and it is also what makes editing the stylesheet
+  and reloading the whole loop.
 - **The version is a digest of the served tree, not `debug.ReadBuildInfo`.** The
   lab's assets are on disk rather than embedded, so the binary's identity says
   nothing about them. `treeVersion` in `cmd/serve/main.go` hashes what is
@@ -157,7 +167,7 @@ Conformance notes, for the reader who checks the boxes:
 - **`context.Context` is not the first parameter of `Engine.Run`**, the only
   call that blocks. The browser owns the frame loop's lifetime and nothing on
   the Go side can cancel it; `Engine.Stop` is the handle the rule is asking for.
-- `make sheet` and `make wasm` are rule-3 targets: the recurring commands the
+- `make sheets` and `make wasm` are rule-3 targets: the recurring commands the
   gates cannot run.
 - No `htmx`: the page has no hypermedia interaction, so the script would do
   nothing.
