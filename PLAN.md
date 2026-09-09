@@ -1,16 +1,22 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is not started.**
-This file is both the plan and the record — what was decided, what was built,
-what changed while building it, and what is left.
+**Status: milestones 1 to 6 are built and green. 7 is decided and planned,
+and not started.** This file is both the plan and the record — what was
+decided, what was built, what changed while building it, and what is left.
 
-**Three changes landed ahead of milestone 7**, the networked game: an entity
-index is now a name the engine keeps, the simulation runs on a fixed tick
-instead of on however long the frame took, and the draw blends between two
-ticks so that the tick is not something a player can see. All three stand on
-their own merit and all three are green — *Three changes networking needs* has
-them. Milestone 7 itself is a brief and nothing else, and it needs a decision
-about this project's job before it is more than that.
+**Milestone 7 is decided.** The lab becomes the network client and the server
+that serves it runs the world: the game state lives on the server, the browser
+sends only what the player is trying to do, cooldowns live on the server and
+the client copies them for its bars, and the camera is the client's. That is a
+thin client, and it dissolves three of the four questions the old brief left
+open. *Networking — milestone 7, decided and planned* is the ordered plan, and
+`SPEC.md` carries the wider job as of the same change.
+
+**Three changes landed ahead of it**: an entity index is now a name the engine
+keeps, the simulation runs on a fixed tick instead of on however long the frame
+took, and the draw blends between two ticks so that the tick is not something a
+player can see. All three stand on their own merit and all three are green —
+*Three changes networking needs* has them.
 
 **The module has a consumer.** `game-jam-template` deleted its copy of the
 engine and requires `github.com/andygeiss/wisp-engine v0.1.0` — the repository
@@ -27,7 +33,9 @@ is what turned up the floor-layer bug in *Fixes on the first real run*.
 outstanding.** It is built, every gate is green, and `make wasm` has rebuilt
 the module with it — but the claim it makes is that the motion is visibly
 smoother, and that is a claim about `pass` in `runtime_js.go`, the one line it
-changed that no test reaches. Step 8 of *Verification* is the check.
+changed that no test reaches. Step 8 of *Verification* is the check, and it is step 0
+of milestone 7: a network client draws nothing but that blend, so it is looked
+at before anything is built on it.
 
 ## Context
 
@@ -93,7 +101,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. A networked game | **not started** — a brief, below, and three of its groundwork changes already landed |
+| 7. The lab plays over the wire | **decided and planned**, not started — the brief, the decisions and the order it is built in are below; three of its groundwork changes already landed |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -119,14 +127,15 @@ which wanted `e.X[i]`: a hit box wants `e.X[i]`, and then there was no hit box
 to want it. It is either a few lines in `Engine.draw` against `BoundingBox` or
 a knob that should go, and until it is one of the two it is a claim nothing
 checks — the same lesson as `WASM_MAX_BYTES` in *Fixes on the first real run*,
-found the same way.
+found the same way. It is step 0 of milestone 7, next to the blend: both are
+things the network client draws with.
 
 ### Gates
 
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 66 test functions: 59 tests, five
+list against the commit and is green too. 73 test functions: 66 tests, five
 examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
@@ -157,6 +166,10 @@ where there is no fullscreen to ask for.
 | Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — not exposed by browsers`, never a made-up number. |
 | Sheet parsing | A hand-written scanner, not `encoding/json`. See *Aseprite sheets*. |
 | Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. |
+| Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, decided and planned*. |
+| Transport | WebSocket, hand-written on both sides, because the dependency rule refuses everything else a browser offers. TCP, so a 15-to-30 Hz game; 30 on the wire. |
+| Where the netcode lives | `internal/`, public the day a second consumer needs it. `cmd/serve` grows into the game server; there is no third `cmd/`. |
+| The lab's skills | `Q` strike, `E` spawn, `R` dash — the template's keys and cooldowns, so its migration maps one to one. |
 
 ## What the repository holds
 
@@ -168,7 +181,7 @@ wisp-engine/
 │   ├── lab/main.go      356 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
-├── doc.go               102 the package doc
+├── doc.go               110 the package doc
 ├── engine.go            450 Engine, Config, New, Step, Tick, DrawPos, Impact
 ├── entity.go            336 Sprite, Tilemap, ID, Add, Delete, Place, Slots
 ├── example_test.go       75 runnable Examples for pkg.go.dev
@@ -199,11 +212,11 @@ wisp-engine/
 └── wisp_test.go        1265 the consumer's view: entities, camera, input, menu
 ```
 
-3,703 lines of engine that build anywhere, 468 behind the browser tag, 2,778 of
+3,711 lines of engine that build anywhere, 468 behind the browser tag, 2,778 of
 tests, 586 of lab and server. The counts in that listing are hand-written and
-three were wrong — one from this milestone, two from before it and unnoticed
-since. `wc -l *.go cmd/*/main.go` is how they were put back, and is what to run
-rather than trust them.
+have now been wrong four times — most recently `doc.go`, which grew eight lines
+with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
+were put back, and is what to run rather than trust them.
 
 **`cmd/serve` reads `web/` from disk; nothing is embedded.** Editing the
 stylesheet and reloading is then the whole loop instead of a rebuild. And the
@@ -377,7 +390,10 @@ somewhere else.
 `Time.TickRate` is the 39th knob, default 60. It is in the menu because every
 field of `Settings` is, but its doc comment says what the menu cannot: two
 machines simulating one world have to agree on it, so a networked game takes it
-from the server rather than from a saved menu.
+from the server rather than from a saved menu. Milestone 7 makes that concrete: the
+rate arrives in the server's Welcome message, and the client writes it over the
+knob every frame, because a saved menu may still hold the 20 from step 8's
+experiment.
 
 **What this left visible is the next section.** At 60 ticks on a 60 Hz display
 the frame jitter means the occasional frame runs two ticks or none, which was a
@@ -1062,88 +1078,80 @@ holding a key no longer re-fires the instant its cooldown ends. Neither is
 hard to put back: the margin is `World.HitBoxMargin` in the tuning menu, and
 the keys are one `JustPressed` to `Down` each.
 
-## Networking — milestone 7, not started
+## Networking — milestone 7, decided and planned
 
-A brief, and the measurements behind it. No code, and none until the first
-question below is answered, because it is not a question about netcode.
+The decision this file said had to come first has been taken, and it is
+narrower than the brief it replaces. **The lab becomes the network client, and
+the server that serves the lab also runs the world.** The game state lives on
+the server. The client sends what the player is trying to do — a direction, a
+skill — and gets the world back; the server owns every position and every
+cooldown, and the client owns the camera and everything else a player only
+looks at. Nothing is written yet. This section is the plan, in the order it is
+built, with each decision recorded next to what it decided.
 
 ### The brief
 
 - **Job:** Two people play the same Wisp game in two browsers and see one
-  world, with the server deciding what actually happened.
+  world, and the server is what decides what happened.
 - **Why:** A game built on this engine today is one person at one keyboard.
   Making it two meant writing the netcode inside the game, where it could not
-  reach the simulation it has to predict — and until the fixed tick landed, the
-  simulation was not reproducible enough to predict at all. The two are the same
-  problem: the engine owned the world and gave nobody else a way to agree with
-  it.
+  reach the simulation — and until the fixed tick landed, the simulation was
+  not reproducible enough to hand to anybody. The two are the same problem: the
+  engine owned the world and gave nobody else a way to agree with it.
 - **Guardrails:**
   - Zero third-party dependencies, as everywhere else. That is what picks the
-    transport rather than taste — see the table below.
+    transport rather than taste — *What the browser allows*, below.
   - `go list -deps .` on the root package keeps showing only the standard
-    library. Netcode lives in subpackages the root does not import, and the
-    server is a third `cmd/`, not a second root.
-  - The client half compiles under TinyGo and stays inside the 320,000-byte
-    gate. A probe put a `syscall/js` WebSocket with binary framing at 6.6 KB;
-    treat 10 KB as the ceiling and fail the target above it, the way
-    `WASM_MAX_BYTES` already fails.
+    library. The netcode lives under `internal/`, which the root does not
+    import; it goes public the day a second consumer needs it and not before.
+  - The client compiles under TinyGo and the module stays inside the
+    320,000-byte gate. A probe put a `syscall/js` WebSocket with binary framing
+    at 6.6 KB; the client half is measured once with `-size=full`, and 10 KB is
+    its ceiling.
   - The server never compiles under TinyGo and never imports the renderer.
-  - `Settings` splits in two on the wire. `Feel`, `Camera`, `Render`, `Audio`
-    and `Debug` are presentation and stay client-local and freely tunable.
-    `World.Speed`, `World.HitBoxMargin` and `Time.TickRate` decide what happens
-    and come from the server. Getting this wrong turns the engine's headline
-    feature into a cheat menu.
-  - The lab's measured path is not to be changed without re-measuring `B` and
-    writing the new number down.
-  - `game-jam-template` is not touched by this milestone.
+  - The client is not trusted. It sends intent — an axis and a skill press —
+    and nothing else. Positions, state bits, cooldowns and who hit whom are the
+    server's; the camera, the shake, the animation timing and the blend are the
+    client's.
+  - The lab's measured path survives: `?solo` runs today's scene, `B` included,
+    and it is re-measured before this file quotes a new ceiling.
+  - `game-jam-template` is not touched.
+  - Deployment is not this milestone. Two browsers on one machine is the whole
+    claim; the server that ships is milestone 8, with a brief of its own.
 - **Done means:**
-  - Two browsers on one machine move each other's sprite, and the server is
-    what decides where they are.
-  - `go list -deps .` on the root package still shows only the standard library.
+  - Two browsers on one machine play one world: each moves its own sprite and
+    sees the other's, `Q` removes a bouncer only when the server says the hit
+    boxes overlapped, and `?solo` still ramps.
+  - `go list -deps .` on the root package still shows only the standard
+    library.
   - `make check`, `make ci` and `make wasm` are green, and the module is under
-    the byte gate.
-  - The RFC 6455 framing has its own tests: a masked frame, a fragmented
-    message, a close handshake, and a frame that claims a length it does not
-    have.
-  - `SPEC.md` says this is part of the job, and anything this waives is in the
-    README in the six-field form.
+    the gate.
+  - The RFC 6455 framing has its own tests: the handshake vector, a masked
+    frame, an unmasked one refused, a fragmented message, a close handshake,
+    and a frame that claims a length it does not have.
+  - `SPEC.md` says this is part of the job — it does, as of this plan — and
+    every rule this waives is in the README in the six-field form.
 
-### The SPEC delta this asks for
+### What the decision settled, and what it dissolved
 
-`SPEC.md` is the project's own four fields, and this brief is a delta against
-it — but a delta the current *Job* sentence does not cover, which is why it is
-a decision and not a task. Concretely, three edits:
+The brief this replaces left four questions open. One is answered and three no
+longer exist, and the same fact does all of it: **the client does not
+simulate.**
 
-**Job** — one sentence becomes two, and the second is the new one:
+| Was open | Now |
+|---|---|
+| Does the engine's job change, or is this a second module? | The job widens; `SPEC.md` carries the second sentence. The netcode is subpackages here, because a client has to reach into the entity store and a second module would need the engine to export that reach anyway. |
+| Server-authoritative with client prediction, or deterministic lockstep? | Neither. A thin client draws what the server sent, one server tick behind, blended by the draw that already blends. Prediction is a follow-up with a number behind it — the latency at which the lag becomes visible — and lockstep needs bit-identical floats that two browsers do not promise. |
+| What tick rate goes on the wire? | 30. The client renders at its own frame rate and the blend covers the gap, which is what it was built for. |
+| `randFloat` is the unseeded global, so two machines cannot agree | They do not have to. Only the server rolls dice; the shake on the client is presentation. `random.go` does not change. |
 
-> A solo developer tunes a 2D pixel-art browser game's feel in the browser, sees
-> what it costs, and pastes the tuned numbers back into their own source.
-> **When the game is for more than one person, the same engine runs on a server
-> and decides what happened.**
-
-**Guardrails** — three lines added, none of them replacing anything:
-
-> - **The root package imports only the standard library, and only the standard
->   library.** `go list -deps .` is the check. The networking packages are
->   subpackages the root does not import, so a game that does not need them does
->   not pay for them.
-> - **The transport is WebSocket, and that is a consequence rather than a
->   choice.** A browser has no UDP; WebRTC and WebTransport both need a
->   dependency or a server the standard library cannot be, so the dependency
->   rule picks this one. It is TCP, so the engine promises a 15-to-30 Hz
->   authoritative game and not a 60 Hz twitch shooter.
-> - **`Settings` splits on the wire.** Presentation stays client-local and
->   tunable; `World` and `Time.TickRate` come from the server. The tuning menu
->   must not become a cheat menu.
-
-**Done means** — one line added:
-
-> - Two browsers on one machine move each other's sprite, the server decides
->   where they are, and `go list -deps .` still shows only the standard library.
-
-Nothing in the current *Guardrails* or *Done means* has to go. The TinyGo rule,
-the canvas-UI rule and the dependency rule all survive this milestone unchanged
-— which is a good sign that it belongs here rather than in a second module.
+The guardrail about `Settings` splitting on the wire dissolves the same way.
+It said `World.Speed`, `World.HitBoxMargin` and `Time.TickRate` have to come
+from the server or the tuning menu becomes a cheat menu. With a client that
+simulates nothing, a client that sets `World.Speed` to 1 moves at the speed
+the server says. One knob still crosses the wire — `Time.TickRate`, because
+the blend has to know how long a server tick is — and the client writes the
+server's value over it every frame.
 
 ### What the browser allows, measured rather than remembered
 
@@ -1177,44 +1185,332 @@ the connection, and a frame header of at most fourteen bytes. It is the same
 move as the hand-written sheet scanner in *Aseprite sheets*, for the same
 reason, and it costs the wasm module nothing because it never goes near it.
 
+### Where it runs
+
+Three things decide who does what. The server is the only place a rule runs.
+The wire carries intent one way and the world the other. The client is the
+engine's own draw, pointed at somebody else's world.
+
+| The server, every tick | The wire | The client, every frame |
+|---|---|---|
+| reads each player's last intent and steers their entity with `Move` | Intent: dx, dy, which skills were pressed | reads the keys and sends an intent when it changes |
+| counts cooldowns down and honours a skill only at zero | Snapshot: every actor's position, state and row | applies the next snapshot as a tick, so the draw blends between two of them |
+| `Tick` — the bounce in `Simulate`, then the engine's own movement | You: your cooldowns | draws cooldown bars from the copy |
+| strike hits by `HasCollision`, spawns, dash expiry | Spawn, Despawn, Event | adds and deletes entities, plays the feel of its own skills |
+| | Welcome: the tick rate, the world size, which entity is you | follows you with the camera; the floor is built locally and never crosses the wire |
+
 ### Shape
 
 ```
 wisp-engine/
-├── net/          the wire format, imported by both halves. No syscall/js,
-│                 no net/http: encoding only, so it tests on the host.
-├── net/ws/       RFC 6455 framing. Server-side; the browser has its own.
-├── net/client/   the syscall/js half (js && wasm)
-└── cmd/gameserver/  the authoritative loop: one Engine, Tick on a ticker
+├── cmd/lab/            the client (js && wasm): the ?solo scene, or the replica, camera and HUD
+│   └── socket.go       the syscall/js WebSocket; its callbacks only append to a queue
+├── cmd/serve/          the page and the tree, as today, plus GET /ws, the world loop and config.go
+├── internal/lab/       what both halves agree on: the skills, the world size, the sheet rows, the bounce
+├── internal/replica/   pure Go: server slot to engine index, the ordered queue, the jitter buffer
+├── internal/wire/      the messages and their bytes; no syscall/js and no net/http, so it tests on the host
+└── internal/ws/        RFC 6455: Accept for the server, Dial for tests and bots; frames, close, ping
 ```
 
-The server runs the same `Engine`, on the same `Tick`, with `Simulate` set to
-the same function — which is the whole point of the two changes that landed. It
-holds no canvas, because `host.go` is already the headless twin and already
-compiles everywhere.
+`cmd/serve` grows into the game server rather than a third `cmd/` appearing
+next to it. The page, the headers, the cache contract and their tests already
+live there, and a second server for one page would put the socket on a
+different origin than the page. Its README description — "a development-only
+static file server" — changes with it.
 
-### The decisions this brief does not settle
+The netcode is `internal/`, not `net/`. The library checklist wants the
+exported surface to be the minimum, and every package extracted rather than
+invented; today the only consumer is `cmd/lab`. The day `game-jam-template`
+wants to be networked is the day these become public packages, and until then
+v0.2.0's promise is three small hooks.
 
-1. **Does the engine's job change, or does this become a second module?**
-   `SPEC.md` says the job is tuning a game's feel in the browser. Networking is
-   not a delta against that sentence, it is a different sentence, and the
-   baseline calls a second binary and a first external system a change of
-   shape. The recommendation is subpackages here and a widened job, because
-   client prediction has to snapshot and restore the entity store — a separate
-   module would need the engine to export those hooks anyway, which is the
-   coupling without the benefit. **This one has to be answered before any code.**
-2. **Server-authoritative with client prediction, or deterministic lockstep?**
-   Recommend authoritative: lockstep needs bit-identical floats across two
-   browsers, which `math.Sqrt` and `math.Exp` do not promise.
-3. **What tick rate goes on the wire?** Recommend 30, and let the client keep
-   rendering at its own frame rate. The interpolation this needed is done —
-   *The draw blends between two ticks* — so at 30 a frame carries a tick every
-   other time and the blend is what covers the gap.
-4. **`randFloat` is still the unseeded global `math/rand/v2`.** `random.go`
-   already says it is one function so *"a build that needs a seeded one has one
-   place to change"*. Two machines cannot agree until it is seeded per match —
-   and the shake has to stay outside that stream, because presentation must not
-   be able to desync a simulation.
+### Three hooks in the engine
+
+Each is a few lines, each has a test, and `make wasm` says what each cost.
+
+| Hook | What it does | Why the engine and not the client |
+|---|---|---|
+| `StateRemote`, bit 14 | `updateStates` skips movement and the idle/move rewrite for an entity carrying it, and still picks its row from the state bits | The client stores the server's bits as they are, `StateRemote` added, so `Camera.Lookahead` reads real move bits. Stripping the move bits instead would leave look-ahead silently dead on every network client — a claim nothing checks |
+| `Engine.Move(i, dx, dy)` | steers entity i from an axis: the move bits, the facing, the facing lock. `applyInput` becomes one call to it | A server has N players and no `Input`. Only the sign of dx and dy counts, so a hand-crafted 100 is a 1 |
+| `Input.MoveAxis()` | today's `moveAxis`, exported | The client turns keys into an intent the same way the engine turns them into bits |
+
+Bit 14 is one of the two the engine reserved for itself; 15 stays spare. The
+tests: a `StateMoveRight|StateRemote` entity does not move over a tick and
+still resolves its row; the camera still leads it; `Move` sets the same bits
+the keys set.
+
+### The wire
+
+Version 1, big-endian, one WebSocket binary message per wire message, the
+first byte the kind. Hand-written on both sides for the reason the sheet
+scanner is: `encoding/json` and its `v2` lean on reflection, which TinyGo pays
+for in kilobytes and fails at in a browser. `binary.BigEndian` and
+`math.Float32bits` are plain functions; nothing here touches `binary.Read`,
+`binary.Write` or `fmt`.
+
+| Direction | Message | Body |
+|---|---|---|
+| client → server | Hello | version u8 |
+| client → server | Intent | seq u16, dx i8, dy i8, skills u8 — bit i is skill i pressed since the last intent |
+| client → server | Ping | t u32, the client's own clock |
+| server → client | Welcome | version u8, tick rate u8, world width u16, world height u16, you u16 (your server slot), tick u32 |
+| server → client | Spawn | slot u16, image u8, column u8, row u8, width u16, height u16, x f32, y f32, z i8, alpha u8, state u64 |
+| server → client | Despawn | slot u16 |
+| server → client | Snapshot | tick u32, n u16, then n × { slot u16, x f32, y f32, state u64, row u8 } — 19 bytes an actor |
+| server → client | You | tick u32, one u16 per skill: milliseconds of cooldown left |
+| server → client | Event | tick u32, slot u16 (who), skill u8, x f32, y f32 |
+| server → client | Pong | t u32 echoed, tick u32 |
+
+A snapshot is the whole world every tick, on purpose. At 1000 bouncers that is
+about 19 KB a tick and 570 KB a second per client, which is fine on one
+machine and is the number the lab exists to print. Sending only what changed,
+and only what is near, are follow-ups that get written when a number says so.
+
+Tests: every message round-trips; a truncated body is an error and not a
+panic; a fuzz target over the decoder, under the rule the sheet fuzzer has —
+whatever it accepts has to be safe to apply.
+
+### The server
+
+The baseline has no rule about WebSockets, hijacked connections or a library
+that ships a server — *Baseline gaps*, at the end of this section — so the
+server is built to the rules that do exist, and the rest is written down as
+conformance notes.
+
+- **`GET /ws`.** `Origin` has to match `Host`. That is RFC 6455's own check,
+  and it stays the handler's job because `http.CrossOriginProtection`, which
+  wraps the mux the way the checklist wants, ignores GETs.
+  `Sec-WebSocket-Version` has to be 13 or the answer is 426. The accept key is
+  base64 of SHA-1 over the client's key and the RFC's GUID — SHA-1 by the
+  RFC's choice, not for security — and the RFC's own example is the test
+  vector: `dGhlIHNhbXBsZSBub25jZQ==` becomes `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`.
+- **After the hijack.** `http.NewResponseController(w).Hijack()` hands back
+  the connection with the deadlines net/http set on it still in place, so the
+  first thing the socket does is clear them and set its own: a read deadline
+  of twice the ping interval, a write deadline per write. That is how the
+  checklist's "read, write and idle timeouts" stays true on a connection the
+  server's own timeouts no longer see. Frames are read from the returned
+  `bufio.Reader`, because it may already hold the first one.
+- **Frames.** A client frame has to be masked, or the server closes with 1002.
+  A client frame's payload is capped at 1 KiB, checked before anything is
+  allocated, or 1009 — an intent is six bytes, and this is the test the
+  brief calls "a frame that claims a length it does not have". Fragments are
+  reassembled; a control frame is at most 125 bytes and never fragmented; a
+  ping gets a pong; a close gets a close.
+- **One goroutine owns the engine**, because `Engine` is not safe for
+  concurrent use and was never meant to be. `world.Tick()` is a plain method:
+  drain the joins, the leaves and the intents; steer each player with `Move`
+  and run its skills, where a press counts only when its cooldown is at zero;
+  `e.Tick(step)`, which is the bounce in `Simulate` and then the engine's own
+  movement; then the rules that read the result — a strike deletes every
+  bouncer whose hit box overlaps the striker's, a dash expires — and finally
+  one encoded Snapshot for everybody and a `You` for each. The ticker
+  goroutine is a wrapper around that method: it runs once before the loop,
+  selects on `ctx.Done()`, and treats `context.Canceled` as a normal stop,
+  which are the three boxes the background-work checklist has for it. A
+  ticker that falls behind drops ticks — the world runs slow rather than away
+  — and the log counts them.
+- **A slow client cannot slow the world.** Every connection has a bounded
+  outbound queue and the loop sends without blocking; a full queue closes that
+  connection.
+- **The socket goroutines are work a request started and did not wait for**,
+  and `srv.Shutdown` never drains a hijacked connection. So the hub counts
+  them, shutdown cancels first and waits after — `hub.Wait()` after
+  `Shutdown`, hung on `RegisterOnShutdown` — and every player gets a 1001 on
+  the way out.
+- **No `errgroup`.** `golang.org/x/sync` is the shape the baseline writes
+  background work in, and a dependency in a module whose feature is having
+  none. Two goroutines under one signal context and a twenty-line wait do
+  what it would.
+- **Intent validation.** dx and dy are reduced to their sign; a skill bit the
+  game does not know is ignored; more than 120 messages a second is 1008; the
+  last intent in a tick wins; a held axis persists until the next intent says
+  otherwise. What a client can still do is press faster than a human, which is
+  a macro and not a cheat.
+- **Config.** `cmd/serve/config.go`, flags with environment defaults, the way
+  the config pattern wants it: `-addr` (`ADDR`), `-dir` (`WEB_DIR`), `-tick`
+  (`TICK`, 30), `-players` (`PLAYERS`, 8), `-bouncers` (`BOUNCERS`, 1000),
+  `-log-level`. Nothing under `internal/` reads the environment. The
+  `log.Printf` lines become one `slog.Logger`, text handler, built in `main`
+  and handed down. `http.MaxBytesHandler` at 1 MiB wraps the mux; on a server
+  that only answers GET it does nothing, and the box is ticked.
+- **The server's world is the actors.** Players and bouncers, nothing else.
+  The floor is 960 tiles that never move and collide with nothing, so the
+  client builds it and it never crosses the wire.
+- **Tests, under `-race`, over `net.Pipe`.** Two clients join through
+  `ws.Dial`; both get the other's Spawn; one sends an intent and the next
+  Snapshot has it moved by `World.Speed` times the step; a strike next to a
+  bouncer despawns it for both; a client that stops reading is closed; an
+  intent with a dx of 100 moves at 1; shutdown closes both with 1001. They
+  call `world.Tick()` themselves, so there is no clock to wait on and nothing
+  to sleep for.
+
+### The lab's rules — `internal/lab`
+
+What both halves have to agree on, in one package with no `syscall/js` in it:
+the skills, the world size, the sheet's rows, and the bounce. The skills are
+the template's keys and cooldowns, so the day that game is networked its `Q`,
+`E` and `R` map one to one.
+
+| Key | Skill | Cooldown | What the server does | What it proves |
+|---|---|---|---|---|
+| `Q` | strike | 1000 ms | deletes every bouncer whose hit box overlaps the striker's — `HasCollision`, on the server's positions | collision, despawn and the cooldown gate are the server's |
+| `E` | spawn | 3000 ms | adds ten bouncers at the player, up to `-bouncers` | spawn on the wire — and the networked lab's ramp |
+| `R` | dash | 5000 ms | `SpeedFactor` 4 for 300 ms, on a server-side timer | a timed effect nobody can extend from a browser |
+
+Cooldowns count down per tick, on the server. A press arrives as a bit in an
+intent and is honoured only when the cooldown is at zero; the client may grey
+the key from its copy, but the copy decides nothing. The randomness — where a
+bouncer starts, how fast it goes — is the unseeded global on the server, which
+is the one place it now runs.
+
+Tests: a second press inside the cooldown does nothing; a strike takes only
+the bouncers that overlap; a spawn past the cap adds none; a dash ends on its
+own tick; the bounce turns around at the world's edge.
+
+### The client — `cmd/lab` and `internal/replica`
+
+- **Two modes, one module.** `?solo` in the URL is today's scene — the
+  spawner, the ramp, `B`, all of it. Without it the lab connects to `/ws` on
+  the page's own origin. The size gate covers both.
+- **On Welcome** the client sets `Time.TickRate` from the server and writes it
+  again every frame — the saved menu may still hold the 20 from step 8's
+  experiment, and the blend needs the server's number — sets the world size,
+  builds the floor locally, sets `InputTarget` to -1 and `RowMask` to 0, and
+  points `CamTarget` at the entity the server said is you.
+- **An intent a frame.** `MoveAxis()` for the direction and `JustPressed` for
+  `Q`, `E` and `R`, read in the update given to `Run`, because that is where
+  edges belong: a frame can carry two ticks or none. It is sent when it
+  changes and every 500 ms regardless, and a `Ping` goes once a second for the
+  RTT row.
+- **The engine's `Simulate` is the applier.** Every message is queued in the
+  order it arrived. Each tick, `Simulate` applies messages up to and including
+  the next Snapshot: a Spawn is an `Add`, and the slot map learns the index; a
+  Despawn is a `Delete`; a Snapshot writes `X`, `Y`, the state with
+  `StateRemote` set, and the row — resetting the frame when the row changed,
+  the way `Play` does. `Tick` has already copied `PrevX` from `X`, so the
+  previous snapshot and this one are exactly the pair `DrawPos` blends, and
+  the client renders one server tick behind. That is the whole reason the
+  blend was built before this.
+- **The jitter buffer** is a depth rule, pure Go, with a test for each line.
+  The target depth is one snapshot. An empty queue holds for a tick, which is
+  a freeze and not a guess. More than two queued applies two per tick — a
+  brief fast-forward rather than a pop. More than 64, which is a tab that
+  slept, applies everything at once.
+- **A hit stop still freezes the picture**, because it stops the client's
+  ticks, and the buffer pays it back at double speed afterwards. `P` is gone
+  in network mode: the server's world does not pause. `B`, `]` and `[` are
+  solo-only.
+- **The HUD** is three cooldown bars from the `You` message, a marker over
+  your own sprite at `DrawPos`, and a net line, which is the lab doing its job
+  again: `rtt`, `in KB/s`, `snapshot B`, `buffer`, and how often it held or
+  fast-forwarded. Your own skills fire `e.Impact(e.Feel.Light)` when their
+  Event comes back; other people's do not.
+- **`socket.go`** is the one `syscall/js` file outside the engine: a WebSocket
+  with `binaryType` set to `arraybuffer`, whose `onmessage` copies the bytes
+  out with `js.CopyBytesToGo` and appends them to the queue. No goroutine and
+  no channel — the callbacks run on the frame loop's goroutine, the same way
+  the key events already do.
+
+### Security headers
+
+The policy does not change. `default-src 'self'` is the fallback for
+`connect-src`, and CSP Level 3 counts a `ws:` connection to the page's own
+host as `'self'` — a claim the last step checks in three consoles rather than
+trusts. If a browser disagrees, the change is a row in the baseline's own
+record and not a project-local edit, because the security-headers pattern lets
+no other document restate the policy. `TestSecureHeaders` keeps pinning the
+string either way. The `Origin` check is the server's half: the policy
+protects the page, not the server.
+
+### What the README will say
+
+Recorded here now, so the plan and the README agree on the day. Two waivers,
+in the six-field form:
+
+- **No `main` package** — the existing waiver's scope widens: `cmd/serve`
+  becomes the lab's server — the page, the module and the world — and is still
+  never deployed until a milestone says otherwise.
+- **Every mutation is a POST route** (`checklists/web-application.md`) — the
+  world's mutations arrive over the socket. The rule protects the no-JS
+  fallback of a plain form, and a canvas client has no such fallback to
+  protect.
+
+And five conformance notes: the hand-written RFC 6455 and the hand-written
+wire, for the reason the sheet scanner is hand-written; the deadlines set after
+the hijack, which is how the timeout rule is met on a connection the server's
+timeouts cannot see; `Shutdown` plus `hub.Wait()`, which is the background-work
+pattern's "cancel first, then wait"; `errgroup`'s two jobs done in twenty
+lines, because the dependency rule outranks the shape; and `WriteTimeout`
+detached by the hijack and replaced, not widened.
+
+`SPEC.md`'s lab line gains `?solo` in the same step, because that is when the
+bare URL stops being the solo scene.
+
+### The order it is built in
+
+Each step is green on its own and is its own commit.
+
+0. **Close the two loose ends the client leans on.** Step 8 of *Verification*
+   — walk the floor with `Render.Interpolate` on and off and write the verdict
+   down, because a network client draws nothing but that blend. And
+   `Debug.ShowHitBoxes`: a few lines in `pass` against `BoundingBox`, or the
+   knob goes.
+1. **The three hooks**, with their tests, and the byte delta from `make wasm`.
+2. **`internal/wire`**: the round-trip tests and the fuzz target.
+3. **`internal/ws`**: the handshake vector, masked and unmasked, fragmented,
+   close, the length lie, ping and pong, the control-frame rules; a fuzz target
+   over the frame reader.
+4. **`internal/lab`**: the skills, the cap, the dash timer, the bounce, and
+   their tests.
+5. **`cmd/serve`**: `config.go`, `slog`, the hub, `world.Tick`, `/ws`,
+   shutdown, and the `-race` tests over `net.Pipe`.
+6. **`internal/replica`**: the slot map, the ordered queue, hold, fast-forward
+   and catch-up, each with a test.
+7. **`cmd/lab`**: network mode, the HUD, the net line, `?solo`; `make wasm`;
+   the sizes written into *Gates*.
+8. **README, SPEC and Makefile**: the waivers and notes above, the run
+   instructions, the key table for network mode, `?solo` in SPEC's lab line;
+   the js vet line only if a js-only package appears under `internal/`.
+9. **Two browsers**, the list below; the numbers into this file; `make ci`;
+   tag `v0.2.0`, with the three hooks named in the tag message.
+
+### Verification
+
+- `make check` and `make ci` green; `go list -deps .` still the standard
+  library; `make wasm` under 320,000 and the new size written into *Gates*.
+- `go test -race ./cmd/serve`: the piped clients of step 5.
+- Two tabs on `make run`: both sprites in both tabs; moving one moves it in
+  the other; `Q` next to a bouncer removes it in both; `E` adds ten in both;
+  `R` is visibly faster and its bar refills over five seconds; a key on
+  cooldown does nothing; `World.Speed` nudged in one tab's menu changes
+  nothing; `?solo` still ramps; `F` keeps the HUD; Safari and Firefox once,
+  for the socket and the console.
+- The cheat check: an intent with a dx of 100 moves at 1, and `Q` held down
+  moves nothing until the server's cooldown is up.
+- **Numbers to write down**, because a claim nothing measures is a memory: the
+  module's bytes before and after; snapshot bytes a tick at 100 and at 1000
+  bouncers; the client's KB/s in; the RTT on localhost; holds and
+  fast-forwards a minute at rest; the server's CPU at 1000 bouncers with two
+  clients.
+
+### Baseline gaps
+
+The baseline is the standing guardrail, and six things this milestone needs
+are not in it. They are named here to be handed back, not fixed as a side
+effect of this work:
+
+1. No rule about WebSockets — the only stance is an htmx anti-pattern — and
+   none about `http.Hijacker`: the deadlines after it, and `Shutdown` not
+   draining it.
+2. `connect-src` for a same-origin `ws:` — the corpus is silent, so it is
+   checked in a browser.
+3. "Every mutation is a POST route" has no reading for an API a socket
+   carries.
+4. `/healthz` without a database, which fires when the server deploys.
+5. No project type for a library that also ships a server.
+6. The background-work shape is written in `errgroup`, which is a dependency a
+   zero-dependency module cannot take.
 
 ## What this does not do
 
@@ -1225,8 +1521,14 @@ compiles everywhere.
   that have happened, which costs up to one tick of lag. Guessing at the tick
   that has not is what a 60 Hz twitch game would want, and it is wrong every
   time something turns around. See *The draw blends between two ticks*.
-- **No networking.** Milestone 7 is a brief and three pieces of groundwork. The
-  transport is decided by the dependency rule and measured; nothing is written.
+- **No networking yet.** Milestone 7 is decided and planned, down to the order
+  it is built in, and none of it is written. The transport is decided by the
+  dependency rule and measured.
+- **No networked `game-jam-template`.** Its rules run once a frame in the
+  update given to `Run`, its action windows are indexed off animation frames,
+  and its state is package-level globals with one hero at index 0. All three
+  move — into `Simulate`, into tick counts, into per-player state — before that
+  game can run on a server, and none of that is this milestone's.
 - **No particles, tweens, tint, rotation or squash-and-stretch.** None of them
   are representable — `drawImage` is called with source size equal to destination
   size and there are no scale, rotation or tint arrays. They arrive with the
@@ -1277,3 +1579,7 @@ Conformance notes worth repeating here:
   imports this*: `game-jam-template` requires v0.1.0 and its own gates are
   green against it. That is what turned this from an extraction with one
   consumer — the shape the rule exists to catch — into a module.
+
+Milestone 7 adds two waivers and five conformance notes when its code lands.
+They are written out under *What the README will say* in that milestone's
+section, so this file and the README agree on the day.

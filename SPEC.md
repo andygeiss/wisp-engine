@@ -5,7 +5,10 @@ The project-level brief. Every task brief is a delta against this file.
 ## Job
 
 A solo developer tunes a 2D pixel-art browser game's feel in the browser, sees
-what it costs, and pastes the tuned numbers back into their own source.
+what it costs, and pastes the tuned numbers back into their own source. When
+the game is for more than one person, the same engine runs on a server that
+decides what happened, and the browser says only what the player is trying to
+do.
 
 ## Why
 
@@ -16,6 +19,18 @@ nobody changed it twice, and no number anywhere said what a change cost.
 ## Guardrails
 
 - Zero third-party dependencies. That is the feature, not a preference.
+- The root package imports only the standard library, and `go list -deps .` is
+  the check. The netcode lives under `internal/`, which the root does not
+  import, so a game that does not need it does not pay for it; it goes public
+  the day a second consumer needs it.
+- The transport is WebSocket, and that is a consequence rather than a choice. A
+  browser has no UDP, and WebRTC and WebTransport both need a dependency the
+  first rule refuses. WebSocket is TCP, so the engine promises a 15-to-30 Hz
+  authoritative game and not a 60 Hz twitch shooter.
+- The client is not trusted. It sends what the player is trying to do — a
+  direction, a skill — and nothing else. The server owns every position, every
+  state bit and every cooldown; the client owns the camera and everything else
+  a player only looks at.
 - The engine keeps compiling with TinyGo. TinyGo is what makes the module small
   enough to load in a second, and it supports less of the standard library than
   Go does — reflection above all, which is why the sheet parser is written by
@@ -37,3 +52,6 @@ nobody changed it twice, and no number anywhere said what a change cost.
 - The lab runs. `make wasm`, `make run`, then at <http://127.0.0.1:8080/>: `M`
   opens the tuning menu, `]` spawns sprites, and the overlay says how many the
   frame time can carry.
+- Two browsers on one machine play one world: each moves its own sprite and
+  sees the other's, a strike lands only when the server says so, and `?solo`
+  still ramps.
