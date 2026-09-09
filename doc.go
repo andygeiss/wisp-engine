@@ -47,8 +47,9 @@
 // eventually, so an index that has to outlive a delete — one in a save, or in
 // a packet — travels as an [ID] and is resolved back with [Engine.Index].
 //
-// The engine owns state bits 0 to 13 ([StateVisible] and friends) and a game
-// adds its own above bit 15. [Engine.RowForState] maps a state to the sprite
+// The engine owns state bits 0 to 14 — [StateVisible] and friends, and
+// [StateRemote] for an entity that somebody else moves — and a game adds its
+// own above bit 15. [Engine.RowForState] maps a state to the sprite
 // sheet row that draws it, so the engine never has to know what an "attack" is.
 //
 // # Sheets

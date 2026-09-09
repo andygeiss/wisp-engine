@@ -1,8 +1,9 @@
 # Extract the Wisp engine into a standalone, tunable module
 
-**Status: milestones 1 to 6 are built and green. 7 is decided and planned,
-and not started.** This file is both the plan and the record — what was
-decided, what was built, what changed while building it, and what is left.
+**Status: milestones 1 to 6 are built and green. 7 is under way: the three
+engine hooks of step 1 are built, and step 0 — looking at the blend — is still
+open.** This file is both the plan and the record — what was decided, what was
+built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
 that serves it runs the world: the game state lives on the server, the browser
@@ -101,7 +102,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **decided and planned**, not started — the brief, the decisions and the order it is built in are below; three of its groundwork changes already landed |
+| 7. The lab plays over the wire | **under way** — step 1 of 9, the three engine hooks, is built; step 0, the blend verdict, waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -135,15 +136,17 @@ things the network client draws with.
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 73 test functions: 66 tests, five
+list against the commit and is green too. 75 test functions: 68 tests, five
 examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 239,469 bytes — 234
+`make wasm` has run. `web/static/lab.wasm` is committed at 239,433 bytes — 234
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
 free list and the fixed tick cost 586 bytes of that between them, the sheet
-2,615 more, and the blend between two ticks 1,972. `ParseSheet` is not among those 2,615: the lab builds its sheet with
+2,615 more, and the blend between two ticks 1,972; the three hooks of
+milestone 7 then took 36 off, because folding the movement into one function
+gave the compiler back more than the new branch cost. `ParseSheet` is not among those 2,615: the lab builds its sheet with
 `GridSheet`, so the scanner is dead code the linker drops.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
@@ -181,13 +184,13 @@ wisp-engine/
 │   ├── lab/main.go      356 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
-├── doc.go               110 the package doc
+├── doc.go               111 the package doc
 ├── engine.go            450 Engine, Config, New, Step, Tick, DrawPos, Impact
 ├── entity.go            336 Sprite, Tilemap, ID, Add, Delete, Place, Slots
 ├── example_test.go       75 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
-├── input.go             129 key state, edge detection, the menu's lock
+├── input.go             133 key state, edge detection, the menu's lock
 ├── internal_test.go     693 draw order, layering, frame mapping, source rects
 ├── knobs.go             323 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
@@ -205,14 +208,14 @@ wisp-engine/
 ├── sheet_json.go        586 the hand-written Aseprite scanner and its limits
 ├── sheet_test.go        501 the export, the grid equivalence, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
-├── state.go             197 the state bits, movement, animation, draw order
+├── state.go             226 the state bits, movement, animation, draw order
 ├── web/
 │   ├── static/              app.css, wasm_app.js, the art, lab.wasm, lab.json
 │   └── templates/index.html the host page
-└── wisp_test.go        1265 the consumer's view: entities, camera, input, menu
+└── wisp_test.go        1458 the consumer's view: entities, camera, input, menu
 ```
 
-3,711 lines of engine that build anywhere, 468 behind the browser tag, 2,778 of
+3,745 lines of engine that build anywhere, 468 behind the browser tag, 2,971 of
 tests, 586 of lab and server. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
@@ -865,7 +868,7 @@ its frames really are a grid. A game with a packed or per-frame-timed sheet
 parses the export; the engine cannot tell the two apart, and that is the point.
 
 The consequence to be honest about: **`ParseSheet` is dead code in
-`lab.wasm`**, dropped by the linker, so the module's 239,469 bytes do not price
+`lab.wasm`**, dropped by the linker, so the module's 239,433 bytes do not price
 the scanner. A game that parses an export pays for it, and the 80,531 bytes of
 headroom are where it comes from.
 
@@ -941,7 +944,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 239,469 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 239,433 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
 read it against *Gates*, which is updated with the build rather than by hand.
@@ -1166,8 +1169,8 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 | WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
 | WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
 
-The engine's own numbers for scale: `web/static/lab.wasm` is 239,469 bytes
-against a 320,000 gate, so 80,531 bytes of headroom and the client half wants
+The engine's own numbers for scale: `web/static/lab.wasm` is 239,433 bytes
+against a 320,000 gate, so 80,567 bytes of headroom and the client half wants
 about 12% of it. That headroom is the lab's. A game carries its own code as
 well — `game-jam-template` is at 411 KB with no gate of this module's to sit
 under — so the 10 KB ceiling is a promise about the engine's half and not
@@ -1238,6 +1241,17 @@ Bit 14 is one of the two the engine reserved for itself; 15 stays spare. The
 tests: a `StateMoveRight|StateRemote` entity does not move over a tick and
 still resolves its row; the camera still leads it; `Move` sets the same bits
 the keys set.
+
+**Built, and it cost nothing.** `make wasm` went from 239,469 bytes to
+239,433 — 36 bytes *smaller*, because the movement moved out of the loop into
+one function, `travel`, and the compiler made more of that than the new branch
+cost. Nine tests cover the three: `TestMove` steers one entity by the keys and
+one by the axis in the same engine and asserts they end in the same state at
+the same place; `TestRemote` holds a state the engine would never write — idle
+with a move bit — and asserts a tick leaves it alone. One thing the tests
+turned up that was already true: an entity with no bit in `RowMask` and no
+move bits is skipped whole, so once it stops it keeps the pose it had. A game
+always sets a mask, and the test does too.
 
 ### The wire
 
@@ -1456,7 +1470,8 @@ Each step is green on its own and is its own commit.
    down, because a network client draws nothing but that blend. And
    `Debug.ShowHitBoxes`: a few lines in `pass` against `BoundingBox`, or the
    knob goes.
-1. **The three hooks**, with their tests, and the byte delta from `make wasm`.
+1. **The three hooks**, with their tests, and the byte delta from `make wasm`
+   — **done**; the delta is 36 bytes down.
 2. **`internal/wire`**: the round-trip tests and the fuzz target.
 3. **`internal/ws`**: the handshake vector, masked and unmasked, fragmented,
    close, the length lie, ping and pong, the control-frame rules; a fuzz target

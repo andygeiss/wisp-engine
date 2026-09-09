@@ -7,7 +7,7 @@ import (
 )
 
 // The engine's state bits. It reads the ones it knows; a game adds its own
-// above bit 15, which leaves two spare for the engine to grow into.
+// above bit 15, which leaves bit 15 spare for the engine to grow into.
 const (
 	StateAnimated = uint64(1 << iota)
 	StateAnimatedLoop
@@ -23,6 +23,13 @@ const (
 	StateMoveRight
 	StateMoveUp
 	StateVisible
+	// StateRemote marks an entity that somebody else moves — a server, a
+	// replay. The engine keeps its row in step with its state bits but never
+	// moves it and never rewrites its pose, so a client can hold the move bits
+	// a server sent, for the camera's look-ahead, without the entity walking
+	// off on its own. It is bit 14, and it comes last rather than in
+	// alphabetical order so that every bit before it keeps the number it had.
+	StateRemote
 )
 
 // MaskMove is the four bits that say an entity is being pushed somewhere.
@@ -90,13 +97,23 @@ func (e *Engine) advanceAnimation(i int, dt float64) {
 	}
 }
 
-// applyInput writes the movement keys into entity i's move and facing bits.
-// Facing is locked while an action outside the pose bits — an attack, a dash —
-// runs, so the sprite does not turn mid-swing.
-func (e *Engine) applyInput(i int) {
+// Move steers entity i by an axis. dx and dy are each negative, zero or
+// positive, and only the sign counts: a value of 100 pushes exactly as hard as
+// a value of 1, so an axis that arrived from somewhere untrusted needs no
+// clamping first. It sets the move bits the next [Engine.Tick] moves the
+// entity by, and turns the entity to face the way it is going — unless an
+// action outside the pose bits, an attack or a dash, is running, so a sprite
+// does not turn mid-swing.
+//
+// The engine calls it every tick for [Engine.InputTarget], with the movement
+// keys. A server calls it for every player with the axis that player sent, and
+// a game calls it to drive anything else the way the keys drive the player.
+// The bits hold until the next call, so once a frame is enough.
+//
+// It panics when i is outside the arrays, which is a programmer error.
+func (e *Engine) Move(i int, dx, dy float64) {
 	s := e.State[i]
 	lockFacing := s&e.RowMask&^MaskPose != 0
-	dx, dy := e.Input.moveAxis()
 
 	s &^= MaskMove
 	if dx < 0 {
@@ -145,10 +162,12 @@ func (e *Engine) sortDrawOrder() {
 
 // updateStates moves every entity by its move bits and picks its sheet row.
 // Entities with no move bits and no bit in RowMask — tiles, HUD sprites — are
-// skipped, which is most of them.
+// skipped, which is most of them. An entity carrying [StateRemote] gets its
+// row and nothing else.
 func (e *Engine) updateStates(dt float64) {
 	if e.Live(e.InputTarget) {
-		e.applyInput(e.InputTarget)
+		dx, dy := e.Input.MoveAxis()
+		e.Move(e.InputTarget, dx, dy)
 	}
 
 	for i, s := range e.State {
@@ -156,28 +175,10 @@ func (e *Engine) updateStates(dt float64) {
 			continue
 		}
 
-		vx, vy := 0.0, 0.0
-		if s&StateMoveLeft != 0 {
-			vx--
-		}
-		if s&StateMoveRight != 0 {
-			vx++
-		}
-		if s&StateMoveUp != 0 {
-			vy--
-		}
-		if s&StateMoveDown != 0 {
-			vy++
-		}
-
-		if n := vx*vx + vy*vy; n > 0 {
-			// Normalize so a diagonal is not faster than a straight line.
-			scale := e.SpeedFactor[i] * e.World.Speed * dt / math.Sqrt(n)
-			e.X[i] += vx * scale
-			e.Y[i] += vy * scale
-			s = s&^StateIdle | StateMove
-		} else {
-			s = s&^StateMove | StateIdle
+		// A remote entity's position and pose are somebody else's answer and
+		// arrive in the bits; only the row is this engine's to pick.
+		if s&StateRemote == 0 {
+			s = e.travel(i, s, dt)
 		}
 
 		// An action outside the pose bits picks the row on its own; idle and
@@ -194,4 +195,32 @@ func (e *Engine) updateStates(dt float64) {
 
 		e.State[i] = s
 	}
+}
+
+// travel moves entity i by its move bits and returns its state with the pose
+// brought up to date: moving if it went anywhere, idle if it did not.
+func (e *Engine) travel(i int, s uint64, dt float64) uint64 {
+	vx, vy := 0.0, 0.0
+	if s&StateMoveLeft != 0 {
+		vx--
+	}
+	if s&StateMoveRight != 0 {
+		vx++
+	}
+	if s&StateMoveUp != 0 {
+		vy--
+	}
+	if s&StateMoveDown != 0 {
+		vy++
+	}
+
+	n := vx*vx + vy*vy
+	if n == 0 {
+		return s&^StateMove | StateIdle
+	}
+	// Normalize so a diagonal is not faster than a straight line.
+	scale := e.SpeedFactor[i] * e.World.Speed * dt / math.Sqrt(n)
+	e.X[i] += vx * scale
+	e.Y[i] += vy * scale
+	return s&^StateIdle | StateMove
 }

@@ -91,10 +91,14 @@ func (in *Input) endFrame() {
 	clear(in.released)
 }
 
-// moveAxis returns the direction the movement keys are asking for, each
+// MoveAxis returns the direction the movement keys are asking for, each
 // component -1, 0 or 1. WASD and the arrow keys both work, so a player who
-// reaches for either is right.
-func (in *Input) moveAxis() (dx, dy float64) {
+// reaches for either is right. It answers 0, 0 while the tuning menu is open,
+// like every other read of the keys.
+//
+// [Engine.Move] takes it, which is how the engine drives [Engine.InputTarget].
+// A client sends it to a server as what the player is trying to do.
+func (in *Input) MoveAxis() (dx, dy float64) {
 	if in.AnyDown("a", "ArrowLeft") {
 		dx--
 	}

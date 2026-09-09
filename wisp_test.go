@@ -636,6 +636,177 @@ func TestStepMovement(t *testing.T) {
 	})
 }
 
+// TestMove is the axis behind the keys: what a server steers a player with,
+// and what a game steers anything else with.
+func TestMove(t *testing.T) {
+	t.Parallel()
+	const attack = uint64(1 << 20)
+
+	// One tick at speed factor 1, the way TestStepMovement counts.
+	step := func(e *wisp.Engine) float64 { return e.World.Speed * 100 }
+
+	t.Run("an axis sets the bits the keys set", func(t *testing.T) {
+		e := newEngine(t)
+		byKeys := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateFaceRight | wisp.StateIdle | wisp.StateVisible,
+			Width: 32, X: 100, Y: 100,
+		})
+		byAxis := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateFaceRight | wisp.StateIdle | wisp.StateVisible,
+			Width: 32, X: 100, Y: 100,
+		})
+		e.InputTarget = byKeys
+		e.Input.Key("a", true)
+		e.Input.Key("s", true)
+
+		e.Move(byAxis, -1, 1)
+		e.Step(100)
+
+		if e.State[byKeys] != e.State[byAxis] {
+			t.Errorf("state %b by axis, want %b, the state the keys produced", e.State[byAxis], e.State[byKeys])
+		}
+		if e.X[byKeys] != e.X[byAxis] || e.Y[byKeys] != e.Y[byAxis] {
+			t.Errorf("moved to (%v, %v) by axis, want (%v, %v), where the keys went",
+				e.X[byAxis], e.Y[byAxis], e.X[byKeys], e.Y[byKeys])
+		}
+		if s := e.State[byAxis]; s&wisp.StateMoveLeft == 0 || s&wisp.StateMoveDown == 0 || s&wisp.StateFaceLeft == 0 {
+			t.Errorf("state %b lacks MoveLeft, MoveDown or FaceLeft", s)
+		}
+	})
+
+	t.Run("only the sign counts", func(t *testing.T) {
+		e := newEngine(t)
+		p := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 100, Y: 100})
+
+		// An axis nobody clamped: a hand-crafted 100, and a -0.001 that is
+		// still a direction.
+		e.Move(p, 100, -0.001)
+		e.Step(100)
+
+		want := step(e) / math.Sqrt2
+		if math.Abs(e.X[p]-(100+want)) > 1e-9 || math.Abs(e.Y[p]-(100-want)) > 1e-9 {
+			t.Errorf("moved to (%v, %v), want (%v, %v): one diagonal step, however big the axis",
+				e.X[p], e.Y[p], 100+want, 100-want)
+		}
+	})
+
+	t.Run("zero stops it", func(t *testing.T) {
+		e := newEngine(t)
+		// A row mask, as every game sets one: without any bit of its own in
+		// it, an entity that has stopped is skipped and keeps its last pose.
+		e.RowMask = wisp.MaskPose
+		p := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 100, Y: 100})
+		e.Move(p, 1, 0)
+		e.Step(100)
+
+		e.Move(p, 0, 0)
+		e.Step(100)
+
+		if e.X[p] != 100+step(e) {
+			t.Errorf("x = %v, want %v: a zero axis kept moving", e.X[p], 100+step(e))
+		}
+		if s := e.State[p]; s&wisp.MaskMove != 0 || s&wisp.StateIdle == 0 {
+			t.Errorf("state %b, want no move bits and Idle", s)
+		}
+	})
+
+	t.Run("an action locks the facing", func(t *testing.T) {
+		e := newEngine(t)
+		e.RowMask = wisp.MaskPose | attack
+		p := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateFaceRight | attack | wisp.StateVisible, Width: 32, X: 100, Y: 100,
+		})
+
+		e.Move(p, -1, 0)
+
+		s := e.State[p]
+		if s&wisp.StateFaceRight == 0 || s&wisp.StateFaceLeft != 0 {
+			t.Errorf("state %b turned around during an action", s)
+		}
+		if s&wisp.StateMoveLeft == 0 {
+			t.Errorf("state %b did not take the move bit", s)
+		}
+	})
+}
+
+// TestRemote is the bit a network client sets on everything a server moves:
+// the engine draws and animates it, but the world it lives in is elsewhere.
+func TestRemote(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a remote entity keeps its bits and goes nowhere", func(t *testing.T) {
+		e := newEngine(t)
+		e.RowMask = wisp.MaskPose
+		e.RowForState = map[uint64]int{wisp.StateFaceRight | wisp.StateMove: 2}
+		// The state a server sends: the pose already decided, the move bits
+		// still in it.
+		state := wisp.StateFaceRight | wisp.StateMove | wisp.StateMoveRight | wisp.StateRemote | wisp.StateVisible
+		p := e.Add(wisp.Sprite{Height: 32, State: state, Width: 32, X: 100, Y: 100})
+
+		e.Step(100)
+
+		if e.X[p] != 100 {
+			t.Errorf("x = %v, want 100: the engine moved an entity that is somebody else's", e.X[p])
+		}
+		if e.State[p] != state {
+			t.Errorf("state %b, want %b untouched", e.State[p], state)
+		}
+		if e.ImageRow[p] != 2 {
+			t.Errorf("row = %d, want 2: the row is still this engine's to pick", e.ImageRow[p])
+		}
+	})
+
+	t.Run("a remote pose is not rewritten", func(t *testing.T) {
+		e := newEngine(t)
+		// Idle with a move bit is a state the engine would never produce,
+		// which is what makes it visible whether the pose was left alone.
+		state := wisp.StateIdle | wisp.StateMoveRight | wisp.StateRemote | wisp.StateVisible
+		p := e.Add(wisp.Sprite{Height: 32, State: state, Width: 32, X: 100, Y: 100})
+
+		e.Step(100)
+
+		if e.State[p] != state {
+			t.Errorf("state %b, want %b: the pose was rewritten", e.State[p], state)
+		}
+	})
+
+	t.Run("the camera still leads a remote entity", func(t *testing.T) {
+		e := newEngine(t)
+		e.SetWorldSize(2000, 2000)
+		e.Camera.Lookahead = 40
+		p := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateMoveRight | wisp.StateRemote | wisp.StateVisible,
+			Width: 32, X: 1000, Y: 1000,
+		})
+		e.CamTarget = p
+
+		e.Step(100)
+
+		if want := 1000 - 640.0/2 + 40; e.CamX != want {
+			t.Errorf("CamX = %v, want %v: the look-ahead lost the move bits", e.CamX, want)
+		}
+		if e.X[p] != 1000 {
+			t.Errorf("x = %v, want 1000", e.X[p])
+		}
+	})
+
+	t.Run("the keys still drive a local entity next to it", func(t *testing.T) {
+		e := newEngine(t)
+		remote := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateMoveRight | wisp.StateRemote | wisp.StateVisible, Width: 32, X: 100, Y: 100,
+		})
+		local := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 100, Y: 100})
+		e.InputTarget = local
+		e.Input.Key("d", true)
+
+		e.Step(100)
+
+		if want := 100 + e.World.Speed*100; e.X[remote] != 100 || e.X[local] != want {
+			t.Errorf("remote x = %v, local x = %v, want 100 and %v", e.X[remote], e.X[local], want)
+		}
+	})
+}
+
 // TestStepTick is about the accumulator: how a frame's time becomes whole
 // simulation ticks, and what happens to the part of it that does not fill one.
 // The engine used to move things by however long the frame took, which is what
@@ -1136,6 +1307,28 @@ func TestInput(t *testing.T) {
 		e.Input.Key("z", true)
 		if !e.Input.Started {
 			t.Error("pressing a key did not mark the player as present")
+		}
+	})
+
+	t.Run("the movement keys are one axis", func(t *testing.T) {
+		e := newEngine(t)
+		e.Input.Key("a", true)
+		e.Input.Key("ArrowUp", true)
+
+		if dx, dy := e.Input.MoveAxis(); dx != -1 || dy != -1 {
+			t.Errorf("axis = (%v, %v) with a and ArrowUp held, want (-1, -1)", dx, dy)
+		}
+
+		// Left and right together cancel rather than pick a winner.
+		e.Input.Key("d", true)
+		if dx, _ := e.Input.MoveAxis(); dx != 0 {
+			t.Errorf("dx = %v with a and d held, want 0", dx)
+		}
+
+		// The menu takes the keyboard, so the axis goes quiet with it.
+		press(e, "m")
+		if dx, dy := e.Input.MoveAxis(); dx != 0 || dy != 0 {
+			t.Errorf("axis = (%v, %v) with the menu open, want (0, 0)", dx, dy)
 		}
 	})
 }
