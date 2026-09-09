@@ -67,7 +67,13 @@ type CameraSettings struct {
 
 // DebugSettings turns the engine's own overlays on.
 type DebugSettings struct {
-	// ShowHitBoxes draws every entity's collision box.
+	// ShowHitBoxes outlines every entity's hit box, the rectangle
+	// [Engine.BoundingBox] returns, over the scene. It is where the rules have
+	// the entity rather than where its sprite is drawn, so with
+	// [RenderSettings.Interpolate] on the box runs up to a tick ahead of the
+	// sprite — that gap is the blend made visible. An invisible entity's box
+	// is drawn too, because an unseen collider is what somebody switching this
+	// on is looking for.
 	ShowHitBoxes bool
 	// ShowMetrics draws the frame-time and memory overlay.
 	ShowMetrics bool

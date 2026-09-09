@@ -60,6 +60,10 @@ Square corners. Pixel art has no radius.
 - **tuning menu** — drawn inside the canvas on `M`, over the running world. A
   panel of `rgba(18, 20, 26, 0.94)` with a `rgba(255, 255, 255, 0.25)` border,
   the selected knob in yellow and the rest in white at 55% alpha.
+- **hit-box overlay** — one-pixel outlines in `rgba(255, 96, 96, 0.9)` over
+  every entity's hit box, on `Debug.ShowHitBoxes` in the tuning menu. Red
+  because it marks where things collide; translucent so the sprite under it
+  still reads.
 - **loader failure card** — drawn by `wasm_app.js` on its own canvas when the
   module cannot be fetched, because at that moment Go has nothing to draw on.
   Ground `#12141a`, heading `#ff6b6b`, detail `#e6e6e6`.

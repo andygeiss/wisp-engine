@@ -1,8 +1,8 @@
 # Extract the Wisp engine into a standalone, tunable module
 
 **Status: milestones 1 to 6 are built and green. 7 is under way: the three
-engine hooks of step 1 are built, and step 0 — looking at the blend — is still
-open.** This file is both the plan and the record — what was decided, what was
+engine hooks of step 1 are built, the hit-box half of step 0 is built, and the
+other half of step 0 — looking at the blend — is still open.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
 
 **Milestone 7 is decided.** The lab becomes the network client and the server
@@ -26,7 +26,7 @@ checklist's first box is checked at last. *Migrating `game-jam-template`* is
 the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
-`make wasm` produces a 234 KB module, every gate is green including the two
+`make wasm` produces a 235 KB module, every gate is green including the two
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
 
@@ -81,7 +81,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42; the module measures 234 KB against a 320,000-byte gate. All
+  TinyGo 0.42; the module measures 235 KB against a 320,000-byte gate. All
   overlay UI is drawn on the canvas, never as DOM, so it survives fullscreen.
   309 KB was the number to protect in `game-jam-template`, and it was not
   protected: importing the module took that game to 411 KB. See *Migrating
@@ -103,7 +103,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **under way** — step 1 of 9, the three engine hooks, is built; step 0, the blend verdict, waits on a browser; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **under way** — step 1 of 9, the three engine hooks, is built, and so is the hit-box half of step 0; the blend verdict waits on a browser; the brief, the decisions and the order are below |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -121,16 +121,27 @@ Three follow-ups, each gated on evidence rather than scheduled:
 - **A native backend** for true OS-level CPU, RAM and GPU numbers. A whole
   second platform layer, and a large one.
 
-And one loose end that is not a follow-up but a defect: **`Debug.ShowHitBoxes`
-draws nothing.** The knob is in the table and in the menu, and its doc comment
-says it "draws every entity's collision box" — nothing anywhere reads it. It
-turned up while working out which readers of a position wanted the blend and
-which wanted `e.X[i]`: a hit box wants `e.X[i]`, and then there was no hit box
-to want it. It is either a few lines in `Engine.draw` against `BoundingBox` or
-a knob that should go, and until it is one of the two it is a claim nothing
-checks — the same lesson as `WASM_MAX_BYTES` in *Fixes on the first real run*,
-found the same way. It is step 0 of milestone 7, next to the blend: both are
-things the network client draws with.
+And one loose end that was not a follow-up but a defect, now closed:
+**`Debug.ShowHitBoxes` drew nothing.** The knob was in the table and in the
+menu, and its doc comment said it "draws every entity's collision box" —
+nothing anywhere read it. It turned up while working out which readers of a
+position wanted the blend and which wanted `e.X[i]`: a hit box wants `e.X[i]`,
+and then there was no hit box to want it. It was either a few lines against
+`BoundingBox` or a knob that should go, and until it was one of the two it was
+a claim nothing checked — the same lesson as `WASM_MAX_BYTES` in *Fixes on the
+first real run*, found the same way. It is the few lines now. `eachHitBox` in
+`render.go` lists the boxes of one pass, culled the way the sprites are, and
+each backend draws that list: the browser as one-pixel `strokeRect` outlines
+over the sprites of the pass, the headless twin into a record a test reads
+back. The box sits at `e.X[i]`, so with the blend on it runs up to a tick
+ahead of the sprite — the blend made visible, not a defect. An invisible
+entity's box is drawn too, because an unseen collider is what somebody
+switching the knob on is looking for; a box of zero size is not, because it
+never collides. `TestShowHitBoxesDrawsWhereTheRulesAre` pins all of that, in
+`host_test.go` under the host build tag, because the js vet compiles the test
+files too and only the headless backend keeps the record. It cost 1,607
+bytes. What it has not had is a look in a browser, which is the same look the
+blend is waiting for.
 
 ### Gates
 
@@ -142,12 +153,13 @@ examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 239,433 bytes — 234
+`make wasm` has run. `web/static/lab.wasm` is committed at 241,040 bytes — 235
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
 free list and the fixed tick cost 586 bytes of that between them, the sheet
 2,615 more, and the blend between two ticks 1,972; the three hooks of
 milestone 7 then took 36 off, because folding the movement into one function
-gave the compiler back more than the new branch cost. `ParseSheet` is not
+gave the compiler back more than the new branch cost, and the hit-box overlay
+put 1,607 on. `ParseSheet` is not
 among those 2,615: the lab builds its sheet with `GridSheet`, so the scanner is
 dead code the linker drops.
 
@@ -191,7 +203,8 @@ wisp-engine/
 ├── entity.go            336 Sprite, Tilemap, ID, Add, Delete, Place, Slots
 ├── example_test.go       75 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
-├── host.go              115 the same API, headless (!js || !wasm)
+├── host.go              127 the same API, headless (!js || !wasm)
+├── host_test.go          48 what the headless twin recorded, read back
 ├── input.go             133 key state, edge detection, the menu's lock
 ├── internal_test.go     693 draw order, layering, frame mapping, source rects
 ├── knobs.go             323 the knob table, GoLiteral, the text format
@@ -202,9 +215,9 @@ wisp-engine/
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
-├── render.go            119 Run, Stop, Rect, Text, sound, the frame's paint
-├── runtime_js.go        468 canvas, events, audio, rAF loop (js && wasm)
-├── settings.go          222 Settings and its eight groups, Defaults
+├── render.go            148 Run, Stop, Rect, Text, sound, the frame's paint
+├── runtime_js.go        491 canvas, events, audio, rAF loop (js && wasm)
+├── settings.go          228 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
 ├── sheet.go             270 Sheet, Frame, Tag, GridSheet, Play, the frame map
 ├── sheet_json.go        586 the hand-written Aseprite scanner and its limits
@@ -217,7 +230,7 @@ wisp-engine/
 └── wisp_test.go        1458 the consumer's view: entities, camera, input, menu
 ```
 
-3,745 lines of engine that build anywhere, 468 behind the browser tag, 2,971 of
+3,792 lines of engine that build anywhere, 491 behind the browser tag, 3,019 of
 tests, 586 of lab and server. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
@@ -427,7 +440,7 @@ far through the current tick the frame sits.
 
 | Reads the blend, because it is what somebody sees | Reads `e.X[i]`, because it is what the rules are about |
 |---|---|
-| `pass`, the one hot loop in `runtime_js.go` | `BoundingBox` and `HasCollision` |
+| `pass`, the one hot loop in `runtime_js.go` | `BoundingBox`, `HasCollision`, and the hit-box overlay drawn from them |
 | `follow`, so the camera and the sprite it is following agree | `sortDrawOrder` and the viewport cull |
 | a game's own `RenderUI` — a health bar over a monster | `updateStates`, `Simulate`, every rule |
 
@@ -870,8 +883,8 @@ its frames really are a grid. A game with a packed or per-frame-timed sheet
 parses the export; the engine cannot tell the two apart, and that is the point.
 
 The consequence to be honest about: **`ParseSheet` is dead code in
-`lab.wasm`**, dropped by the linker, so the module's 239,433 bytes do not price
-the scanner. A game that parses an export pays for it, and the 80,531 bytes of
+`lab.wasm`**, dropped by the linker, so the module's 241,040 bytes do not price
+the scanner. A game that parses an export pays for it, and the 78,960 bytes of
 headroom are where it comes from.
 
 ### Still open
@@ -946,7 +959,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 239,433 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 241,040 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
 read it against *Gates*, which is updated with the build rather than by hand.
@@ -1172,8 +1185,8 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 | WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
 | WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
 
-The engine's own numbers for scale: `web/static/lab.wasm` is 239,433 bytes
-against a 320,000 gate, so 80,567 bytes of headroom and the client half wants
+The engine's own numbers for scale: `web/static/lab.wasm` is 241,040 bytes
+against a 320,000 gate, so 78,960 bytes of headroom and the client half wants
 about 12% of it. That headroom is the lab's. A game carries its own code as
 well — `game-jam-template` is at 411 KB with no gate of this module's to sit
 under — so the 10 KB ceiling is a promise about the engine's half and not
@@ -1470,9 +1483,10 @@ Each step is green on its own and is its own commit.
 
 0. **Close the two loose ends the client leans on.** Step 8 of *Verification*
    — walk the floor with `Render.Interpolate` on and off and write the verdict
-   down, because a network client draws nothing but that blend. And
-   `Debug.ShowHitBoxes`: a few lines in `pass` against `BoundingBox`, or the
-   knob goes.
+   down, because a network client draws nothing but that blend — **still
+   open, and a browser's to close**. And `Debug.ShowHitBoxes`: a few lines in
+   `pass` against `BoundingBox`, or the knob goes — **done**, the few lines,
+   at 1,607 bytes; *Where it stands* has the shape.
 1. **The three hooks**, with their tests, and the byte delta from `make wasm`
    — **done**; the delta is 36 bytes down.
 2. **`internal/wire`**: the round-trip tests and the fuzz target.

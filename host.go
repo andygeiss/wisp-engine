@@ -11,6 +11,9 @@ import "time"
 // It records what it was asked to do, which is what the tests assert against.
 // The browser build's backend, in runtime_js.go, is the real one.
 type backend struct {
+	// Boxes records the hit boxes the last frame outlined, as left, top,
+	// width and height.
+	boxes [][4]float64
 	// Drawn counts the entities the last frame drew.
 	drawn int
 	// Played records every sound the engine asked for, newest last.
@@ -36,6 +39,7 @@ type played struct {
 
 func (r *backend) begin(e *Engine) {
 	r.smoothing = e.Render.Smoothing
+	r.boxes = r.boxes[:0]
 	r.drawn = 0
 }
 
@@ -44,6 +48,14 @@ func (r *backend) drawEntities(e *Engine) {
 		if e.State[i]&StateVisible != 0 {
 			r.drawn++
 		}
+	}
+	if !e.Debug.ShowHitBoxes {
+		return
+	}
+	for _, screenSpace := range []bool{false, true} {
+		e.eachHitBox(screenSpace, func(l, t, w, h float64) {
+			r.boxes = append(r.boxes, [4]float64{l, t, w, h})
+		})
 	}
 }
 

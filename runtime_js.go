@@ -385,6 +385,29 @@ func (r *backend) pass(e *Engine, screenSpace bool) {
 	if alpha != 1.0 {
 		r.ctx.Set("globalAlpha", 1.0)
 	}
+	if e.Debug.ShowHitBoxes {
+		r.hitBoxes(e, screenSpace)
+	}
+}
+
+// hitBoxColor is what the hit-box overlay is drawn in: red, because it marks
+// where things collide, and translucent, so the sprite under it still reads.
+// It lives in the browser half because only the browser paints it, and the
+// host build's staticcheck would call it unused anywhere else.
+const hitBoxColor = "rgba(255, 96, 96, 0.9)"
+
+// hitBoxes outlines the hit boxes of one pass, over its sprites. The stroke is
+// placed on the half pixel, so a one-pixel line covers one pixel instead of
+// bleeding faintly across two.
+func (r *backend) hitBoxes(e *Engine, screenSpace bool) {
+	r.ctx.Set("strokeStyle", hitBoxColor)
+	r.ctx.Set("lineWidth", 1)
+	e.eachHitBox(screenSpace, func(l, t, w, h float64) {
+		if e.Render.PixelSnap {
+			l, t = math.Round(l), math.Round(t)
+		}
+		r.ctx.Call("strokeRect", l+0.5, t+0.5, max(w-1, 0), max(h-1, 0))
+	})
 }
 
 // toggleFullscreen enters or leaves fullscreen, no more often than the

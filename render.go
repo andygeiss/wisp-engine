@@ -98,6 +98,35 @@ func (e *Engine) draw() {
 	e.rt.end()
 }
 
+// eachHitBox calls fn with the hit box of every entity the pass for
+// screenSpace draws, culled to the view the way the sprites are. It is what
+// [DebugSettings.ShowHitBoxes] draws with, and it lives here rather than in
+// either backend so the browser and its headless twin agree on which boxes
+// there are.
+//
+// A box is where the rules have the entity — [Engine.BoundingBox] reads e.X[i]
+// — and not where the sprite is drawn, which is up to a tick behind with
+// [RenderSettings.Interpolate] on. An invisible entity's box is included: an
+// unseen collider is exactly what a debug overlay exists to show. A box of
+// zero size is skipped, because it never collides.
+func (e *Engine) eachHitBox(screenSpace bool, fn func(l, t, w, h float64)) {
+	vLeft, vTop := 0.0, 0.0
+	if !screenSpace {
+		vLeft, vTop = e.CamX-e.CamShakeX, e.CamY-e.CamShakeY
+	}
+	vRight, vBottom := vLeft+e.Width, vTop+e.Height
+	for i := range e.Slots() {
+		if !e.Live(i) || e.ScreenSpace[i] != screenSpace {
+			continue
+		}
+		l, t, r, b := e.BoundingBox(i)
+		if r <= l || b <= t || r < vLeft || l > vRight || b < vTop || t > vBottom {
+			continue
+		}
+		fn(l, t, r-l, b-t)
+	}
+}
+
 // loadingText says what is happening, and names the file when something is
 // wrong. "Loading..." for ever is what a missing asset used to look like.
 func (e *Engine) loadingText() string {
