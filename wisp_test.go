@@ -38,6 +38,8 @@ func entitySlots(t *testing.T, e *wisp.Engine) int {
 		"ImageColumn":  len(e.ImageColumn),
 		"ImageIndex":   len(e.ImageIndex),
 		"ImageRow":     len(e.ImageRow),
+		"PrevX":        len(e.PrevX),
+		"PrevY":        len(e.PrevY),
 		"ScreenSpace":  len(e.ScreenSpace),
 		"SpeedFactor":  len(e.SpeedFactor),
 		"SpriteHeight": len(e.SpriteHeight),
@@ -782,6 +784,178 @@ func TestStepTick(t *testing.T) {
 		}
 		if len(*dts) != 0 {
 			t.Errorf("ticks = %d while paused, want 0", len(*dts))
+		}
+	})
+}
+
+// TestStepInterpolation covers the gap between a fixed tick and a frame rate
+// that is not a multiple of it. The simulation moves in whole ticks, so a draw
+// reading e.X[i] shows the world in tick-sized steps: a frame carrying two
+// ticks or none is a visible pop, and on a 144 Hz display that is a third of
+// the frames.
+func TestStepInterpolation(t *testing.T) {
+	t.Parallel()
+
+	// A 10 ms tick, so a count is a count and not a rounding, and the default
+	// speed of 0.125 px/ms carries an entity 1.25 px in one of them.
+	const tickMS, perTick = 10.0, 1.25
+
+	// mover returns an engine on that tick with one entity walking right.
+	mover := func(t *testing.T) (*wisp.Engine, int) {
+		e := newEngine(t)
+		e.Time.TickRate = 1000 / tickMS
+		i := e.Add(wisp.Sprite{
+			Height: 32, State: wisp.StateVisible | wisp.StateMoveRight,
+			Width: 32, X: 100, Y: 50,
+		})
+		return e, i
+	}
+
+	t.Run("a frame between two ticks draws between two of them", func(t *testing.T) {
+		e, i := mover(t)
+
+		// One whole tick with nothing left over. The world has moved and the
+		// draw has not: it shows where the tick started and spends the next
+		// tick's worth of frames getting there, which is the one tick of lag
+		// that buys the smoothness.
+		e.Step(tickMS)
+		if x, _ := e.DrawPos(i); x != 100 {
+			t.Fatalf("drawn x = %v the instant a tick ended, want 100", x)
+		}
+
+		e.Step(tickMS / 2)
+		if x, _ := e.DrawPos(i); x != 100+perTick/2 {
+			t.Errorf("drawn x = %v half way through a tick, want %v", x, 100+perTick/2)
+		}
+	})
+
+	t.Run("frames that carry no tick still move the sprite", func(t *testing.T) {
+		e, i := mover(t)
+		e.Step(tickMS)
+
+		// Three frames inside one tick, which is what a display faster than
+		// the simulation does. Without the blend all three draw the same pixel
+		// and the frame that finally carries a tick jumps the whole distance.
+		seen := make([]float64, 0, 3)
+		for range cap(seen) {
+			e.Step(tickMS / 3)
+			x, _ := e.DrawPos(i)
+			seen = append(seen, x)
+		}
+		for n := 1; n < len(seen); n++ {
+			if seen[n] <= seen[n-1] {
+				t.Errorf("drawn x went %v then %v, want it moving on every frame", seen[n-1], seen[n])
+			}
+		}
+	})
+
+	t.Run("a frame carrying two ticks blends over the last of them", func(t *testing.T) {
+		e, i := mover(t)
+
+		// Two whole ticks and half of a third left in the accumulator.
+		e.Step(2.5 * tickMS)
+
+		if want := 100 + 2*perTick; e.X[i] != want {
+			t.Fatalf("x = %v after two ticks, want %v", e.X[i], want)
+		}
+		if x, _ := e.DrawPos(i); x != 100+perTick+perTick/2 {
+			t.Errorf("drawn x = %v, want %v: the blend covered both ticks rather than the last one",
+				x, 100+perTick+perTick/2)
+		}
+	})
+
+	t.Run("the blend moves the sprite and not the world", func(t *testing.T) {
+		e, i := mover(t)
+
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		if want := 100 + perTick; e.X[i] != want {
+			t.Errorf("x = %v, want %v: half a tick moved the simulation", e.X[i], want)
+		}
+		// Collision is the simulation, so it stays on e.X[i]. A hit box that
+		// followed the draw would be up to a tick away from where the rules say
+		// the entity is.
+		l, _, r, _ := e.BoundingBox(i)
+		if mid := (l + r) / 2; mid != e.X[i] {
+			t.Errorf("the hit box is centred on %v, want %v", mid, e.X[i])
+		}
+	})
+
+	t.Run("turning it off draws exactly what the simulation holds", func(t *testing.T) {
+		e, i := mover(t)
+		e.Render.Interpolate = false
+
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		if x, y := e.DrawPos(i); x != e.X[i] || y != e.Y[i] {
+			t.Errorf("drawn (%v, %v), want the simulation's own (%v, %v)", x, y, e.X[i], e.Y[i])
+		}
+	})
+
+	t.Run("a new entity does not slide in from the origin", func(t *testing.T) {
+		e, _ := mover(t)
+		// Half way through a tick, so anything with a stale previous position
+		// is drawn somewhere it has never been.
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		j := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 500, Y: 300})
+
+		if x, y := e.DrawPos(j); x != 500 || y != 300 {
+			t.Errorf("a new entity draws at (%v, %v), want (500, 300)", x, y)
+		}
+	})
+
+	t.Run("a reused slot does not slide in from the entity before", func(t *testing.T) {
+		e, _ := mover(t)
+		gone := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 900, Y: 900})
+		e.Delete(gone)
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		j := e.Add(wisp.Sprite{Height: 32, State: wisp.StateVisible, Width: 32, X: 10, Y: 20})
+
+		if j != gone {
+			t.Fatalf("the new entity took slot %d, want the free one at %d", j, gone)
+		}
+		if x, y := e.DrawPos(j); x != 10 || y != 20 {
+			t.Errorf("a reused slot draws at (%v, %v), want (10, 20)", x, y)
+		}
+	})
+
+	t.Run("Place moves an entity without drawing the way there", func(t *testing.T) {
+		e, i := mover(t)
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		e.Place(i, 900, 800)
+
+		if e.X[i] != 900 || e.Y[i] != 800 {
+			t.Errorf("the entity is at (%v, %v), want (900, 800)", e.X[i], e.Y[i])
+		}
+		if x, y := e.DrawPos(i); x != 900 || y != 800 {
+			t.Errorf("a placed entity draws at (%v, %v), want (900, 800): the jump was smeared", x, y)
+		}
+	})
+
+	t.Run("the camera follows what is drawn", func(t *testing.T) {
+		e, i := mover(t)
+		e.SetWorldSize(4000, 4000)
+		e.Place(i, 1000, 1000)
+		e.CamTarget = i
+
+		e.Step(tickMS)
+		e.Step(tickMS / 2)
+
+		x, y := e.DrawPos(i)
+		if e.CamX != x-e.Width/2 || e.CamY != y-e.Height/2 {
+			t.Errorf("camera = (%v, %v), want it on the drawn (%v, %v)",
+				e.CamX, e.CamY, x-e.Width/2, y-e.Height/2)
+		}
+		if e.CamX == e.X[i]-e.Width/2 {
+			t.Error("the camera sits on the simulation, so the sprite it follows jitters against the screen")
 		}
 	})
 }

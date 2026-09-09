@@ -80,6 +80,9 @@ const (
 
 // A spawned sprite carries its own velocity: the engine moves entities by
 // state bits, which is a game's job to set, and bouncing is this lab's game.
+// It is bounced from Simulate rather than from the frame update, so the sprites
+// the lab is measuring move on the same tick everything else in the world does
+// and the draw can blend between two of them.
 //
 // spawned holds their entity indices rather than counting from a base index.
 // A delete leaves its slot for the next spawn instead of moving everybody
@@ -128,6 +131,7 @@ func main() {
 	}
 	e.SetWorldSize(worldW, worldH)
 	e.RenderUI = func() { renderUI(e) }
+	e.Simulate = func(dt float64) { simulate(e, dt) }
 
 	build(e)
 	e.Run(func(dt float64) { update(e, dt) })
@@ -237,8 +241,14 @@ func update(e *wisp.Engine, dt float64) {
 	}
 
 	ramp(e, dt)
+}
 
-	// Bounce every spawned sprite off the world edges.
+// simulate bounces every spawned sprite off the world edges. It is the lab's
+// whole world, so it belongs on the tick: a sprite moved once per frame is
+// already exactly where that frame wants it, and blending it toward a tick it
+// never took would drag it backwards — which is why the showcase judders if
+// this loop sits in the frame update instead.
+func simulate(e *wisp.Engine, dt float64) {
 	for n, i := range spawned {
 		e.X[i] += vx[n] * dt
 		e.Y[i] += vy[n] * dt

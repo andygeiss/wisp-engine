@@ -63,6 +63,12 @@ type Engine struct {
 	// entities whose state has a bit in RowMask, and [Engine.Play] writes the
 	// tag it looked up.
 	ImageRow []int
+	// PrevX is where the entity was when the tick running now began, and
+	// PrevY the same. [Engine.DrawPos] is what reads them, to place a sprite
+	// between two ticks; [Engine.Place] is how a game writes them, for an
+	// entity that jumps somewhere rather than travelling there.
+	PrevX []float64
+	PrevY []float64
 	// ScreenSpace draws the entity in canvas pixels, past the camera.
 	ScreenSpace []bool
 	// SpeedFactor multiplies World.Speed for this entity.
@@ -263,6 +269,14 @@ func (e *Engine) Step(elapsed float64) {
 // this machine's — a server's tick, or a replay of one whose input you already
 // have — which is why it takes the step instead of reading a clock.
 func (e *Engine) Tick(dt float64) {
+	// Where everything stands as this tick begins, so the frames drawn before
+	// the next one have somewhere to come from. Two slice copies, run whether
+	// or not [RenderSettings.Interpolate] is on: the knob belongs to the draw,
+	// and a knob switched on mid-scene would otherwise blend from wherever the
+	// world was when it was switched off.
+	copy(e.PrevX, e.X)
+	copy(e.PrevY, e.Y)
+
 	if e.Simulate != nil {
 		e.Simulate(dt)
 	}
@@ -283,6 +297,44 @@ func (e *Engine) runTicks(dt float64) {
 		e.Tick(step)
 		e.tickAccum -= step
 	}
+}
+
+// DrawPos returns where entity i is drawn this frame: its own position,
+// blended back toward where it stood when the current tick began.
+//
+// The simulation moves in whole ticks and a frame lands between two of them.
+// Reading e.X[i] straight into the draw therefore shows the world in
+// tick-sized steps — a frame that carries two ticks or none is a pop of about
+// two pixels at the default speed, which is a third of the frames on a 144 Hz
+// display. Blending is what spends the frame's own position on it.
+//
+// It costs up to one tick of lag, because it draws between two positions the
+// simulation has already been rather than guessing at one it has not. A guess
+// is wrong every time something turns around, and a game full of wrong guesses
+// is worse than a game a sixtieth of a second behind.
+//
+// It is the drawn position and nothing else. Collision, the camera's bounds
+// and every rule read e.X[i], which is where the simulation actually is. A
+// game drawing its own thing over an entity — a health bar, a name — wants
+// this one, or it trails the sprite it is labelling by a tick.
+//
+// It panics when i is outside the arrays, which is a programmer error.
+func (e *Engine) DrawPos(i int) (x, y float64) {
+	t := e.tickBlend()
+	// A weighted sum rather than prev+(x-prev)*t, because this one gives back
+	// exactly the two ends at t of 0 and 1 however the rounding falls.
+	return e.X[i]*t + e.PrevX[i]*(1-t), e.Y[i]*t + e.PrevY[i]*(1-t)
+}
+
+// tickBlend is how far this frame sits between the tick that has run and the
+// one that has not: 0 the instant a tick ends, approaching 1 just before the
+// next begins. With [RenderSettings.Interpolate] off it is 1, so DrawPos hands
+// back the simulation's own position and the draw has one path either way.
+func (e *Engine) tickBlend() float64 {
+	if !e.Render.Interpolate {
+		return 1
+	}
+	return min(max(e.tickAccum/e.tickStep(), 0), 1)
 }
 
 // tickStep is one tick in milliseconds. A rate of zero or less would divide by

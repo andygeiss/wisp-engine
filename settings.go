@@ -120,6 +120,16 @@ type RenderSettings struct {
 	// Background is the CSS colour the canvas is cleared to. Empty clears to
 	// transparent and lets the page show through.
 	Background string
+	// Interpolate draws each entity between the tick that has run and the one
+	// that has not, so a frame carrying two ticks or none does not show a pop.
+	// It costs the draw a little arithmetic and shows the world up to one tick
+	// in the past. Off, every sprite sits exactly where the simulation put it,
+	// and moves in the steps the simulation moved it in.
+	//
+	// It smooths what [Engine.Simulate] moves. An entity moved from the update
+	// [Engine.Run] was given is already frame-accurate, and blending drags it
+	// backwards instead — which is one more reason movement belongs in a tick.
+	Interpolate bool
 	// PixelSnap rounds sprite positions to whole pixels.
 	PixelSnap bool
 	// Smoothing turns on the canvas's own interpolation. Pixel art wants it
@@ -194,8 +204,9 @@ func Defaults() Settings {
 			},
 		},
 		Render: RenderSettings{
-			PixelSnap: true,
-			Smoothing: false,
+			Interpolate: true,
+			PixelSnap:   true,
+			Smoothing:   false,
 		},
 		Time: TimeSettings{
 			FullscreenDebounce: 500,

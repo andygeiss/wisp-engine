@@ -357,8 +357,11 @@ func (r *backend) pass(e *Engine, screenSpace bool) {
 		}
 
 		w, h := e.SpriteWidth[i], e.SpriteHeight[i]
-		dstX := e.X[i] - w/2
-		dstY := e.Y[i] - h/2
+		// Between the last tick and the next, so the sprite moves with the
+		// frames rather than in the steps the simulation moves in.
+		px, py := e.DrawPos(i)
+		dstX := px - w/2
+		dstY := py - h/2
 		if dstX+w < vLeft || dstX > vRight || dstY+h < vTop || dstY > vBottom {
 			continue
 		}

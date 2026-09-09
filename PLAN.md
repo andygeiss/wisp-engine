@@ -4,12 +4,13 @@
 This file is both the plan and the record — what was decided, what was built,
 what changed while building it, and what is left.
 
-**Two changes landed ahead of milestone 7**, the networked game: an entity index
-is now a name the engine keeps, and the simulation runs on a fixed tick instead
-of on however long the frame took. Both stand on their own merit and both are
-green — *Two changes networking needs* has them. Milestone 7 itself is a brief
-and nothing else, and it needs a decision about this project's job before it is
-more than that.
+**Three changes landed ahead of milestone 7**, the networked game: an entity
+index is now a name the engine keeps, the simulation runs on a fixed tick
+instead of on however long the frame took, and the draw blends between two
+ticks so that the tick is not something a player can see. All three stand on
+their own merit and all three are green — *Three changes networking needs* has
+them. Milestone 7 itself is a brief and nothing else, and it needs a decision
+about this project's job before it is more than that.
 
 **The module has a consumer.** `game-jam-template` deleted its copy of the
 engine and requires `github.com/andygeiss/wisp-engine v0.1.0` — the repository
@@ -18,9 +19,15 @@ checklist's first box is checked at last. *Migrating `game-jam-template`* is
 the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
-`make wasm` produces a 232 KB module, every gate is green including the two
+`make wasm` produces a 234 KB module, every gate is green including the two
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
+
+**The blend between two ticks has not been looked at, and that is the one thing
+outstanding.** It is built, every gate is green, and `make wasm` has rebuilt
+the module with it — but the claim it makes is that the motion is visibly
+smoother, and that is a claim about `pass` in `runtime_js.go`, the one line it
+changed that no test reaches. Step 8 of *Verification* is the check.
 
 ## Context
 
@@ -64,7 +71,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42; the module measures 232 KB against a 320,000-byte gate. All
+  TinyGo 0.42; the module measures 234 KB against a 320,000-byte gate. All
   overlay UI is drawn on the canvas, never as DOM, so it survives fullscreen.
   309 KB was the number to protect in `game-jam-template`, and it was not
   protected: importing the module took that game to 411 KB. See *Migrating
@@ -86,7 +93,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. A networked game | **not started** — a brief, below, and two of its groundwork changes already landed |
+| 7. A networked game | **not started** — a brief, below, and three of its groundwork changes already landed |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -104,20 +111,30 @@ Three follow-ups, each gated on evidence rather than scheduled:
 - **A native backend** for true OS-level CPU, RAM and GPU numbers. A whole
   second platform layer, and a large one.
 
+And one loose end that is not a follow-up but a defect: **`Debug.ShowHitBoxes`
+draws nothing.** The knob is in the table and in the menu, and its doc comment
+says it "draws every entity's collision box" — nothing anywhere reads it. It
+turned up while working out which readers of a position wanted the blend and
+which wanted `e.X[i]`: a hit box wants `e.X[i]`, and then there was no hit box
+to want it. It is either a few lines in `Engine.draw` against `BoundingBox` or
+a knob that should go, and until it is one of the two it is a claim nothing
+checks — the same lesson as `WASM_MAX_BYTES` in *Fixes on the first real run*,
+found the same way.
+
 ### Gates
 
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 65 test functions: 58 tests, five
+list against the commit and is green too. 66 test functions: 59 tests, five
 examples, and two fuzz targets with their seeds. `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 237,497 bytes — 232
+`make wasm` has run. `web/static/lab.wasm` is committed at 239,469 bytes — 234
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
-free list and the fixed tick cost 586 bytes of that between them, and the sheet
-2,615 more. `ParseSheet` is not among those 2,615: the lab builds its sheet with
+free list and the fixed tick cost 586 bytes of that between them, the sheet
+2,615 more, and the blend between two ticks 1,972. `ParseSheet` is not among those 2,615: the lab builds its sheet with
 `GridSheet`, so the scanner is dead code the linker drops.
 
 **`staticcheck` needed a fix before it would pass, and it was not noise.**
@@ -146,20 +163,20 @@ where there is no fullscreen to ask for.
 ```
 wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
-├── camera.go            140 follow, dead zone, look-ahead, bounds, shake
+├── camera.go            144 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      346 the playground (js && wasm)
+│   ├── lab/main.go      356 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
 ├── doc.go               102 the package doc
-├── engine.go            398 Engine, Config, New, Step, Tick, Impact, HitStop
-├── entity.go            314 Sprite, Tilemap, ID, Add, Delete, Slots, Live
+├── engine.go            450 Engine, Config, New, Step, Tick, DrawPos, Impact
+├── entity.go            336 Sprite, Tilemap, ID, Add, Delete, Place, Slots
 ├── example_test.go       75 runnable Examples for pkg.go.dev
 ├── go.mod                   go 1.27, no requires
 ├── host.go              115 the same API, headless (!js || !wasm)
 ├── input.go             129 key state, edge detection, the menu's lock
 ├── internal_test.go     693 draw order, layering, frame mapping, source rects
-├── knobs.go             322 the knob table, GoLiteral, the text format
+├── knobs.go             323 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
 ├── menu.go              358 the M overlay, canvas-drawn
@@ -168,8 +185,8 @@ wisp-engine/
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
 ├── render.go            119 Run, Stop, Rect, Text, sound, the frame's paint
-├── runtime_js.go        465 canvas, events, audio, rAF loop (js && wasm)
-├── settings.go          211 Settings and its eight groups, Defaults
+├── runtime_js.go        468 canvas, events, audio, rAF loop (js && wasm)
+├── settings.go          222 Settings and its eight groups, Defaults
 ├── settings_test.go     244 the literal, the coverage net, the fuzz target
 ├── sheet.go             270 Sheet, Frame, Tag, GridSheet, Play, the frame map
 ├── sheet_json.go        586 the hand-written Aseprite scanner and its limits
@@ -179,11 +196,11 @@ wisp-engine/
 ├── web/
 │   ├── static/              app.css, wasm_app.js, the art, lab.wasm, lab.json
 │   └── templates/index.html the host page
-└── wisp_test.go        1091 the consumer's view: entities, camera, input, menu
+└── wisp_test.go        1265 the consumer's view: entities, camera, input, menu
 ```
 
-3,613 lines of engine that build anywhere, 465 behind the browser tag, 2,604 of
-tests, 576 of lab and server. The counts in that listing are hand-written and
+3,703 lines of engine that build anywhere, 468 behind the browser tag, 2,778 of
+tests, 586 of lab and server. The counts in that listing are hand-written and
 three were wrong — one from this milestone, two from before it and unnoticed
 since. `wc -l *.go cmd/*/main.go` is how they were put back, and is what to run
 rather than trust them.
@@ -277,11 +294,12 @@ The transparency in that scene is not a bug and was never one: `spawn` asks for
 cent opaque on purpose. It is what made the overdraw look like a rendering
 fault rather than a layering one.
 
-## Two changes networking needs
+## Three changes networking needs
 
-Both landed before milestone 7 was decided, because both are worth having
-whether or not it happens. Neither is network code; both are things the engine
-got wrong for a game that is only ever played by one person at one keyboard.
+All three landed before milestone 7 was decided, because all three are worth
+having whether or not it happens. None of them is network code; all of them are
+things the engine got wrong for a game that is only ever played by one person
+at one keyboard.
 
 ### An entity index is now a name the engine keeps
 
@@ -361,15 +379,12 @@ field of `Settings` is, but its doc comment says what the menu cannot: two
 machines simulating one world have to agree on it, so a networked game takes it
 from the server rather than from a saved menu.
 
-**What this does not do yet, and it is visible.** There is no interpolation
-between ticks. At 60 ticks on a 60 Hz display the frame jitter means the
-occasional frame runs two ticks or none, which is a one-tick pop — about two
-pixels at the default speed, and pixel-art snapping hides most of it. On a 144
-Hz display it is a third of the frames. The fix is a previous position per
-entity and a lerp in the draw, which is 16 bytes an entity and a change to the
-one hot loop in `runtime_js.go`; it is not done, and the lab's own bounce is
-still in the per-frame update rather than in `Simulate` because moving it there
-before interpolation exists would put the judder into the showcase.
+**What this left visible is the next section.** At 60 ticks on a 60 Hz display
+the frame jitter means the occasional frame runs two ticks or none, which was a
+one-tick pop — about two pixels at the default speed, and a third of the frames
+on a 144 Hz display. Pixel-art snapping hid most of it and none of it was
+wrong, but a fixed tick is a thing a player could see, which is not what a
+fixed tick is for.
 
 **The ramp number needs re-reading.** `updateStates` moved from every frame to
 every tick, so the per-frame cost changed. It should not have changed much —
@@ -378,10 +393,93 @@ already skipping them, and `advanceAnimations`, the pass that does touch all of
 them, is still per frame. But 34,476 was measured against the old shape and is
 now a number about a build that no longer exists.
 
+### The draw blends between two ticks
+
+`Step` spends a frame's world time on whole ticks and carries the remainder, so
+a frame runs two ticks, or one, or none — and the draw read `e.X[i]`, which is
+where the *simulation* is. A frame that ran no tick therefore drew the previous
+frame's pixel and the next one jumped two ticks' worth.
+
+`Tick` now keeps the position it is moving away from — `PrevX` and `PrevY`, two
+slice copies at the top of it — and `DrawPos(i)` returns the two blended by how
+far through the current tick the frame sits.
+
+| Reads the blend, because it is what somebody sees | Reads `e.X[i]`, because it is what the rules are about |
+|---|---|
+| `pass`, the one hot loop in `runtime_js.go` | `BoundingBox` and `HasCollision` |
+| `follow`, so the camera and the sprite it is following agree | `sortDrawOrder` and the viewport cull |
+| a game's own `RenderUI` — a health bar over a monster | `updateStates`, `Simulate`, every rule |
+
+The camera is the half of that table worth explaining. `Camera.Smoothing`
+defaults to 0, which is a hard snap to the target: a camera snapping to the
+tick position while the sprite it follows draws at the blended one would leave
+that sprite jittering against the screen — the judder moved rather than fixed.
+
+**It costs up to one tick of lag, and that is the trade rather than a defect.**
+The blend is between two positions the simulation has already been. The other
+way is to guess forward from the last one, and a guess is wrong every time
+something turns around; a sprite that overshoots a wall and snaps back is worse
+than a sprite a sixtieth of a second behind.
+
+Three things had to follow, and each is a test that fails without it:
+
+- **`Add` starts an entity where it is.** `set` writes `PrevX` along with `X`,
+  so a new entity does not streak in from the origin — and, because `Delete`
+  empties a slot through the same function, a reused slot does not streak in
+  from whoever had it last.
+- **`Place(i, x, y)` is how a game jumps an entity**: a respawn, a teleport, the
+  far side of a door. The draw cannot tell a jump from a very fast tick, so
+  without it the jump is smeared across one.
+- **The lab's bounce moved into `Simulate`.** This file said why it could not
+  before: moving it there ahead of interpolation would have put the judder into
+  the showcase. The reverse is now true. An entity moved once a frame is
+  already exactly where that frame wants it, so blending drags it *backwards*
+  toward a tick it never took — which turns "movement belongs in the tick" from
+  advice into a rule with teeth.
+
+**`Render.Interpolate` is the 40th knob, default on.** It is presentation, so
+milestone 7's guardrail leaves it client-local and freely tunable. Off, every
+sprite sits exactly where the simulation put it and moves in the steps the
+simulation moved it in, which is what the engine did before — one keystroke
+away for anybody whose game it does not suit.
+
+The previous position is kept whether the knob is on or off. It is two slice
+copies a tick against a per-drawn-entity cost in the draw that the knob does
+turn off, and keeping it means a knob switched on mid-scene cannot blend from
+wherever the world was when it was switched off.
+
+**It cost 1,972 bytes**, 237,497 to 239,469 against the 320,000 gate. What it
+did not cost is a per-entity array of anything but the two floats: no new
+branch in `updateStates`, `advanceAnimations` or the draw's cull, because the
+blend is arithmetic on two numbers that were already there.
+
+**`game-jam-template` has to move its movement before it upgrades**, and this
+is the one consequence that reaches outside this repository. It sets no
+`Simulate` at all: the monsters chase the hero and the hero is clamped to the
+world from the per-frame update, which was the only place there was when that
+code was written. Those entities are moved every frame and drawn every frame,
+so today they are perfectly smooth — and a blend would drag them back on the
+frames that carry no tick, which is the artifact this change removes from
+engine-moved entities arriving at game-moved ones. It is pinned to `v0.1.0`, so
+nothing is broken now; whoever bumps it moves that movement into `Simulate`
+first, which is where the fixed tick wanted it anyway. Its hero already
+benefits either way, because the engine's own move bits have run on the tick
+since the tick existed.
+
+**Nobody has looked at it yet.** Everything above is an argument about
+arithmetic, and the tests hold that half of it: four of them fail if the blend
+is stubbed out, three more if `set` or `Place` stops writing the previous
+position, and both were run against a broken build rather than assumed. But
+"the motion is visibly smoother" is not something a test can say, and the only
+line changed in the draw is one that only the js build ever runs — which is the
+same shape as milestone 5's switch to a sheet, where every argument was about
+`srcRect` and the browser was what checked it. Step 8 of *Verification* is that
+check for this one, and it has not been done.
+
 ## `Settings` — the point of the project
 
 Eight groups, alphabetical, every field a number or a bool so one menu can edit
-all of them. **39 knobs across 11 nesting levels**, because `Feel` holds four
+all of them. **40 knobs across 11 nesting levels**, because `Feel` holds four
 sub-structs of its own.
 
 ```go
@@ -391,7 +489,7 @@ type Settings struct {
 	Camera    CameraSettings    // DeadzoneHeight/Width, Lookahead, Smoothing, Snap
 	Debug     DebugSettings     // ShowHitBoxes, ShowMetrics
 	Feel      FeelSettings      // Heavy, Light, Medium, Shake
-	Render    RenderSettings    // Background, PixelSnap, Smoothing
+	Render    RenderSettings    // Background, Interpolate, PixelSnap, Smoothing
 	Time      TimeSettings      // FullscreenDebounce, MaxStep, Scale
 	World     WorldSettings     // HitBoxMargin, Speed
 }
@@ -751,8 +849,8 @@ its frames really are a grid. A game with a packed or per-frame-timed sheet
 parses the export; the engine cannot tell the two apart, and that is the point.
 
 The consequence to be honest about: **`ParseSheet` is dead code in
-`lab.wasm`**, dropped by the linker, so the module's 237,497 bytes do not price
-the scanner. A game that parses an export pays for it, and the 82,503 bytes of
+`lab.wasm`**, dropped by the linker, so the module's 239,469 bytes do not price
+the scanner. A game that parses an export pays for it, and the 80,531 bytes of
 headroom are where it comes from.
 
 ### Still open
@@ -763,11 +861,13 @@ as no sheet, and the tilemap keeps indexing with `TilesetCols` and
 `TilesetRows`. `web/static/img/tiles.json` is committed because `make sheets`
 writes it, not because anything reads it.
 
-**`B` still needs re-reading, and now for two reasons.** The fixed tick moved
-`updateStates` off the frame, and the draw now calls `srcRect` per drawn entity
-instead of doing the arithmetic inline. Neither should cost much — one is a
-loop that was already skipping the spawned sprites, the other a bounds check
-and a pointer — but 34,476 was measured against neither.
+**`B` still needs re-reading, and now for three reasons.** The fixed tick moved
+`updateStates` off the frame, the draw now calls `srcRect` per drawn entity
+instead of doing the arithmetic inline, and it calls `DrawPos` as well. None of
+the three should cost much — the first is a loop that was already skipping the
+spawned sprites, the other two a bounds check and some arithmetic on numbers
+already in cache — but 34,476 was measured against none of them, and the lab's
+bounce has moved from the frame to the tick since as well.
 
 ## Commands
 
@@ -825,7 +925,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 237,497 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 239,469 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
 read it against *Gates*, which is updated with the build rather than by hand.
@@ -854,6 +954,13 @@ functions survived the linker — that pair is what priced the template's 100 KB
    reach. Still to read at the ceiling: the *sort / draw* row.
 7. `F` — fullscreen. The overlay and the menu are still there, because they are
    drawn inside the canvas. Anything that disappears was in the DOM.
+8. **Not yet done.** Walk the player across the floor, then turn
+   `Render.Interpolate` off in the menu and walk back. The motion has to be
+   visibly smoother with it on — that is the whole claim of *The draw blends
+   between two ticks*, and no test can make it. Nudge `Time.TickRate` down to
+   20 to see the difference the way a slow display would, and watch a spawned
+   sprite as well as the player: the two reach the draw by different routes,
+   one through `Simulate` and one through the engine's own move bits.
 
 ## Migrating `game-jam-template` — milestone 6, done
 
@@ -1051,9 +1158,9 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 | WebRTC data channels | the client is `syscall/js`; the **server** needs ICE, DTLS and SCTP | The only way to get real UDP semantics, and there is no standard-library anything. `pion/webrtc` is the dependency the guardrail exists to refuse |
 | WebTransport | QUIC datagrams, technically the right answer | No standard-library QUIC server, and Safari |
 
-The engine's own numbers for scale: `web/static/lab.wasm` is 237,497 bytes
-against a 320,000 gate, so 82,503 bytes of headroom and the client half wants
-about 8% of it. That headroom is the lab's. A game carries its own code as
+The engine's own numbers for scale: `web/static/lab.wasm` is 239,469 bytes
+against a 320,000 gate, so 80,531 bytes of headroom and the client half wants
+about 12% of it. That headroom is the lab's. A game carries its own code as
 well — `game-jam-template` is at 411 KB with no gate of this module's to sit
 under — so the 10 KB ceiling is a promise about the engine's half and not
 about anybody's finished game.
@@ -1100,7 +1207,9 @@ compiles everywhere.
    Recommend authoritative: lockstep needs bit-identical floats across two
    browsers, which `math.Sqrt` and `math.Exp` do not promise.
 3. **What tick rate goes on the wire?** Recommend 30, and let the client keep
-   rendering at its own frame rate. Needs the interpolation above first.
+   rendering at its own frame rate. The interpolation this needed is done —
+   *The draw blends between two ticks* — so at 30 a frame carries a tick every
+   other time and the blend is what covers the gap.
 4. **`randFloat` is still the unseeded global `math/rand/v2`.** `random.go`
    already says it is one function so *"a build that needs a seeded one has one
    place to change"*. Two machines cannot agree until it is seeded per match —
@@ -1112,12 +1221,11 @@ compiles everywhere.
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second
   platform layer. A follow-up, and a large one.
 - **No WebGL2 renderer.** A follow-up, gated on the number `B` produces.
-- **No interpolation between ticks.** The simulation is fixed-rate and the draw
-  reads the current position, so a frame that runs two ticks or none shows a
-  one-tick pop — about two pixels at the default speed. It wants a previous
-  position per entity and a lerp in the draw. Until it exists the lab's own
-  bounce stays in the per-frame update, so the showcase does not judder.
-- **No networking.** Milestone 7 is a brief and two pieces of groundwork. The
+- **No extrapolation past the last tick.** The draw blends between two ticks
+  that have happened, which costs up to one tick of lag. Guessing at the tick
+  that has not is what a 60 Hz twitch game would want, and it is wrong every
+  time something turns around. See *The draw blends between two ticks*.
+- **No networking.** Milestone 7 is a brief and three pieces of groundwork. The
   transport is decided by the dependency rule and measured; nothing is written.
 - **No particles, tweens, tint, rotation or squash-and-stretch.** None of them
   are representable — `drawImage` is called with source size equal to destination

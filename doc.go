@@ -91,6 +91,14 @@
 // shake, the animations — stays on the frame, because none of it has to agree
 // with anybody.
 //
+// That the world moves in steps is not something a player should be able to
+// see, so the draw blends each entity between the tick that has run and the
+// one that has not. [Engine.DrawPos] is where a sprite is on screen and
+// e.X[i] is where the rules say it is; they are up to a tick apart, and
+// anything a game draws over an entity wants the first one. A game that jumps
+// an entity somewhere rather than moving it there says so with [Engine.Place],
+// or the jump is blended like any other.
+//
 // # Platforms
 //
 // The browser half is behind a js and wasm build tag. Everything else builds

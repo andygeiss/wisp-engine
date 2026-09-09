@@ -119,6 +119,8 @@ func (e *Engine) claim() (index int) {
 	e.ImageColumn = append(e.ImageColumn, 0)
 	e.ImageIndex = append(e.ImageIndex, 0)
 	e.ImageRow = append(e.ImageRow, 0)
+	e.PrevX = append(e.PrevX, 0)
+	e.PrevY = append(e.PrevY, 0)
 	e.ScreenSpace = append(e.ScreenSpace, false)
 	e.SpeedFactor = append(e.SpeedFactor, 0)
 	e.SpriteHeight = append(e.SpriteHeight, 0)
@@ -142,6 +144,11 @@ func (e *Engine) set(i int, s Sprite) {
 	e.ImageColumn[i] = s.Column
 	e.ImageIndex[i] = s.Image
 	e.ImageRow[i] = s.Row
+	// An entity is drawn from where it was, so a new one has to have been
+	// where it is. Otherwise its first frames are a streak in from the origin,
+	// and a reused slot streaks in from whoever had it last.
+	e.PrevX[i] = s.X
+	e.PrevY[i] = s.Y
 	e.ScreenSpace[i] = s.ScreenSpace
 	e.SpeedFactor[i] = s.SpeedFactor
 	e.SpriteHeight[i] = s.Height
@@ -278,6 +285,19 @@ func (e *Engine) Delete(i int) {
 	}
 }
 
+// Place puts entity i at (x, y) without drawing the way there.
+//
+// A sprite that jumps — a respawn, a teleport, the far side of a door — is a
+// jump the draw cannot tell from a very fast tick, so [Engine.DrawPos] would
+// smear it across the gap for a tick. Writing e.X[i] moves the entity; this
+// moves the entity and forgets where it was.
+//
+// It panics when i is outside the arrays, which is a programmer error.
+func (e *Engine) Place(i int, x, y float64) {
+	e.X[i], e.PrevX[i] = x, x
+	e.Y[i], e.PrevY[i] = y, y
+}
+
 // HasCollision reports whether the hit boxes of entities i and j overlap.
 func (e *Engine) HasCollision(i, j int) bool {
 	il, it, ir, ib := e.BoundingBox(i)
@@ -297,6 +317,8 @@ func (e *Engine) Reset() {
 	e.ImageColumn = e.ImageColumn[:0]
 	e.ImageIndex = e.ImageIndex[:0]
 	e.ImageRow = e.ImageRow[:0]
+	e.PrevX = e.PrevX[:0]
+	e.PrevY = e.PrevY[:0]
 	e.ScreenSpace = e.ScreenSpace[:0]
 	e.SpeedFactor = e.SpeedFactor[:0]
 	e.SpriteHeight = e.SpriteHeight[:0]

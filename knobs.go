@@ -132,6 +132,7 @@ func knobTable() []knob {
 		boolKnob("Feel.Shake", "IgnoresHitStop", func(s *Settings) *bool { return &s.Feel.Shake.IgnoresHitStop }),
 		boolKnob("Feel.Shake", "Snap", func(s *Settings) *bool { return &s.Feel.Shake.Snap }),
 
+		boolKnob("Render", "Interpolate", func(s *Settings) *bool { return &s.Render.Interpolate }),
 		boolKnob("Render", "PixelSnap", func(s *Settings) *bool { return &s.Render.PixelSnap }),
 		boolKnob("Render", "Smoothing", func(s *Settings) *bool { return &s.Render.Smoothing }),
 

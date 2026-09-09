@@ -44,8 +44,12 @@ func (e *Engine) follow(dt float64) {
 		return
 	}
 
-	wantX := e.X[i] - e.Width/2
-	wantY := e.Y[i] - e.Height/2
+	// Where the target is drawn, not where the simulation has it: the two are
+	// up to a tick apart, and a camera locked to the other one leaves the
+	// sprite it is following jittering against a screen that moves in steps.
+	tx, ty := e.DrawPos(i)
+	wantX := tx - e.Width/2
+	wantY := ty - e.Height/2
 
 	// Look-ahead pushes the view the way the entity is moving, so the player
 	// sees where they are going rather than where they have been.
