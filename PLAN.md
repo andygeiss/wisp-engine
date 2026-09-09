@@ -923,13 +923,21 @@ moment the engine moved. It says 400 KB now, and `make wasm` there ends with a
 size check against `WASM_MAX_BYTES = 430000` — the same lesson as *Fixes on the
 first real run*: a claim nothing checks is a memory.
 
-### Still open
+### It has been played
 
-**Nobody has played it.** Every gate is green and the module builds, but "the
-game still plays" is the template's own *Done means* and it needs a browser:
-`make wasm`, `make run`, then clear the arena and take the boss's ten lives at
-<http://127.0.0.1:8080/>. What to watch for is the hit box — it moved six pixels
-— and whether `Q` on an edge rather than a level reads as better or worse.
+**The game runs on the module.** That is the template's own *Done means* and the
+one thing no gate here could reach: every argument that the migration is safe —
+the same state bits, the same rows, the same speed, the same tilemap arithmetic
+— is an argument about code only the js build ever runs. The gates make the
+claim; the browser is what checked it.
+
+Two things are now judgements rather than unknowns, and both are the player's to
+make over time rather than a test's. The hit box moved six pixels, from 20x20
+offset down-and-right to 20x20 centred, so the boss fight is a slightly
+different fight. And `Q`, `E` and `R` fire on an edge instead of a level, so
+holding a key no longer re-fires the instant its cooldown ends. Neither is
+hard to put back: the margin is `World.HitBoxMargin` in the tuning menu, and
+the keys are one `JustPressed` to `Down` each.
 
 ## Networking — milestone 7, not started
 
