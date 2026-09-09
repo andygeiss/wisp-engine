@@ -196,7 +196,7 @@ wisp-engine/
 ├── assets/                  the .aseprite sources; `make sheets` exports them
 ├── camera.go            144 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
-│   ├── lab/main.go      356 the playground (js && wasm)
+│   ├── lab/main.go      243 the playground (js && wasm)
 │   └── serve/main.go    230 the static file server behind `make run`
 ├── DESIGN.md                the page's tokens
 ├── doc.go               111 the package doc
@@ -238,7 +238,7 @@ wisp-engine/
 ```
 
 3,792 lines of engine that build anywhere, 491 behind the browser tag, 3,019 of
-tests, 586 of lab and server. The counts in that listing are hand-written and
+tests, 473 of lab and server. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
 were put back, and is what to run rather than trust them.

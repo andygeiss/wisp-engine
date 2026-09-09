@@ -11,55 +11,10 @@ import (
 	"math/rand/v2"
 
 	"github.com/andygeiss/wisp-engine"
-)
-
-// Images, in the order LoadImages receives them.
-const (
-	imageSprites = iota
-	imageTiles
-)
-
-// Rows of the sheet, one animation each. They are the game-jam-template's own
-// sheet, so the lab animates without anybody drawing anything new.
-//
-// A row is also a tag's index, which is why these still name the right
-// animation now that the lab attaches a Sheet: the grid and the Aseprite
-// export describe the same twelve animations in the same order, and
-// TestGridSheetMatchesTheExport is what says so.
-const (
-	rowIdleRight = iota
-	rowIdleLeft
-	rowMoveRight
-	rowMoveLeft
-)
-
-// The sheet's shape, and the names the Aseprite export gives its first four
-// tags. The lab builds its Sheet with GridSheet rather than parsing
-// web/static/img/lab.json, because fetching and carrying 27 KB of JSON would
-// cost a third of the module's remaining size budget to describe a sheet whose
-// every frame is the same size. A game with a packed or per-frame-timed sheet
-// parses the export instead; the engine cannot tell the two apart.
-const (
-	sheetCols = 8
-	sheetRows = 12
-	frameMS   = 100
-
-	tagRunRight = "run-right"
+	"github.com/andygeiss/wisp-engine/internal/lab"
 )
 
 const (
-	tileSize   = 32.0
-	tilesCols  = 40
-	tilesRows  = 24
-	tilesetCol = 3
-	tilesetRow = 5
-	worldW     = tilesCols * tileSize
-	worldH     = tilesRows * tileSize
-
-	// zFloor is below every layer spawn uses, so the floor never draws over an
-	// actor standing on it.
-	zFloor = -1
-
 	// spawnBatch is how many sprites one press adds. Shift multiplies it by
 	// ten, so walking the count up to the ceiling takes a few seconds rather
 	// than a few minutes.
@@ -78,21 +33,13 @@ const (
 	rampSettle = 2000.0
 )
 
-// A spawned sprite carries its own velocity: the engine moves entities by
-// state bits, which is a game's job to set, and bouncing is this lab's game.
-// It is bounced from Simulate rather than from the frame update, so the sprites
-// the lab is measuring move on the same tick everything else in the world does
-// and the draw can blend between two of them.
-//
-// spawned holds their entity indices rather than counting from a base index.
-// A delete leaves its slot for the next spawn instead of moving everybody
-// below it down, so which slot a sprite lands in is the engine's business —
-// and the index it hands back is a name that keeps working.
+// The scene: a player, and the bouncers the lab spawns to measure a frame.
+// The bouncers are internal/lab's, so the sprites this scene measures move by
+// the same code the server moves them by — from Simulate, on the tick, where
+// the draw can blend between two of them.
 var (
-	player  int
-	spawned []int
-	vx      []float64
-	vy      []float64
+	player   int
+	bouncers *lab.Bouncers
 
 	// The automatic ramp: it adds sprites until the frame time breaks, then
 	// stops and holds the count. That number is what the lab exists to find.
@@ -112,26 +59,13 @@ func main() {
 	e := wisp.New(wisp.Config{})
 	e.LoadImages("/static/img/lab.png", "/static/img/tiles.png")
 
-	// One sheet, for the sprites. The tileset gets no entry and so keeps the
-	// grid convention, which is what a tilemap wants: it indexes its tiles
-	// with its own rows and columns, and none of them is an animation.
-	sheet := wisp.GridSheet(sheetCols, sheetRows, tileSize, tileSize, frameMS)
-	sheet.Tags[rowIdleRight].Name = "idle-right"
-	sheet.Tags[rowIdleLeft].Name = "idle-left"
-	sheet.Tags[rowMoveRight].Name = tagRunRight
-	sheet.Tags[rowMoveLeft].Name = "run-left"
-	e.Sheets = []wisp.Sheet{sheet}
-
-	e.RowMask = wisp.MaskPose
-	e.RowForState = map[uint64]int{
-		wisp.StateFaceRight | wisp.StateIdle: rowIdleRight,
-		wisp.StateFaceLeft | wisp.StateIdle:  rowIdleLeft,
-		wisp.StateFaceRight | wisp.StateMove: rowMoveRight,
-		wisp.StateFaceLeft | wisp.StateMove:  rowMoveLeft,
-	}
-	e.SetWorldSize(worldW, worldH)
+	// The sheet, the pose rows and the world size are the lab's rules, shared
+	// with the server. The tileset gets no sheet and so keeps the grid
+	// convention, which is what a tilemap wants: it indexes its tiles with
+	// its own rows and columns, and none of them is an animation.
+	lab.Setup(e)
 	e.RenderUI = func() { renderUI(e) }
-	e.Simulate = func(dt float64) { simulate(e, dt) }
+	e.Simulate = simulate
 
 	build(e)
 	e.Run(func(dt float64) { update(e, dt) })
@@ -142,28 +76,14 @@ func main() {
 // for.
 func build(e *wisp.Engine) {
 	e.Reset()
-	spawned, vx, vy = spawned[:0], vx[:0], vy[:0]
+	bouncers = lab.NewBouncers(e, 0)
 	ramping, rampAt, rampCeiling, rampDrawn, settled = false, 0, -1, 0, 0
 
-	tiles := make([]int, tilesCols*tilesRows)
-	for i := range tiles {
-		tiles[i] = 4 // the floor tile of the template's tileset
-	}
 	// The floor goes below every actor. Sharing a layer with them would not
 	// hide it behind them: inside one layer the sort is by baseline, so each
 	// tile below a sprite's middle draws after it and repaints its lower half.
-	e.AddTilemap(wisp.Tilemap{
-		Cols: tilesCols, Height: tileSize, Image: imageTiles, Rows: tilesRows,
-		Tiles: tiles, TilesetCols: tilesetCol, TilesetRows: tilesetRow, Width: tileSize,
-		Z: zFloor,
-	})
-
-	player = e.Add(wisp.Sprite{
-		Height: tileSize, Image: imageSprites,
-		State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateFaceRight |
-			wisp.StateIdle | wisp.StateVisible,
-		Width: tileSize, X: worldW / 2, Y: worldH / 2, Z: 1,
-	})
+	lab.BuildFloor(e)
+	player = lab.NewPlayer(e).Entity
 	e.CamTarget, e.InputTarget = player, player
 }
 
@@ -176,38 +96,16 @@ func build(e *wisp.Engine) {
 // nobody plays.
 func spawn(e *wisp.Engine, n int) {
 	for range n {
-		i := e.Add(wisp.Sprite{
-			Alpha:  0.6 + rand.Float64()*0.4,
-			Height: tileSize, Image: imageSprites,
-			State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateVisible,
-			Width: tileSize,
-			X:     e.CamX + rand.Float64()*e.Width,
-			Y:     e.CamY + rand.Float64()*e.Height,
-			Z:     rand.IntN(3),
-		})
-		// A spawned sprite carries no move bits and no bit in RowMask, so
-		// nothing in the update will pick a row for it. Play is what names the
-		// animation instead of a bare index.
-		e.Play(i, tagRunRight)
-		e.FrameOffset[i] = rand.IntN(sheetCols)
-		spawned = append(spawned, i)
-		vx = append(vx, (rand.Float64()*2-1)*0.15)
-		vy = append(vy, (rand.Float64()*2-1)*0.15)
+		bouncers.Add(e.CamX+rand.Float64()*e.Width, e.CamY+rand.Float64()*e.Height)
 	}
 }
 
-// despawn removes the last n spawned sprites, newest first, and forgets their
-// velocities with them.
-func despawn(e *wisp.Engine, n int) {
+// despawn removes the last n spawned sprites, newest first.
+func despawn(n int) {
 	for range n {
-		last := len(spawned) - 1
-		if last < 0 {
+		if bouncers.RemoveLast() < 0 {
 			return
 		}
-		e.Delete(spawned[last])
-		spawned = spawned[:last]
-		vx = vx[:last]
-		vy = vy[:last]
 	}
 }
 
@@ -221,9 +119,9 @@ func update(e *wisp.Engine, dt float64) {
 	case e.Input.JustPressed("]"):
 		spawn(e, batch)
 	case e.Input.JustPressed("["):
-		despawn(e, batch)
+		despawn(batch)
 	case e.Input.JustPressed("0"):
-		despawn(e, len(spawned))
+		despawn(bouncers.Len())
 	case e.Input.JustPressed("p"):
 		e.Paused = !e.Paused
 	case e.Input.JustPressed("n"):
@@ -248,18 +146,7 @@ func update(e *wisp.Engine, dt float64) {
 // already exactly where that frame wants it, and blending it toward a tick it
 // never took would drag it backwards — which is why the showcase judders if
 // this loop sits in the frame update instead.
-func simulate(e *wisp.Engine, dt float64) {
-	for n, i := range spawned {
-		e.X[i] += vx[n] * dt
-		e.Y[i] += vy[n] * dt
-		if e.X[i] < 0 || e.X[i] > worldW {
-			vx[n] = -vx[n]
-		}
-		if e.Y[i] < 0 || e.Y[i] > worldH {
-			vy[n] = -vy[n]
-		}
-	}
-}
+func simulate(dt float64) { bouncers.Simulate(dt) }
 
 // startRamp begins, or abandons, the automatic search for the ceiling.
 func startRamp(e *wisp.Engine) {
@@ -267,7 +154,7 @@ func startRamp(e *wisp.Engine) {
 		ramping = false
 		return
 	}
-	despawn(e, len(spawned))
+	despawn(bouncers.Len())
 	e.Debug.ShowMetrics = true
 	ramping, rampAt, rampCeiling, rampDrawn, settled = true, 0, -1, 0, 0
 }
@@ -293,7 +180,7 @@ func ramp(e *wisp.Engine, dt float64) {
 	// the first check every time.
 	if s.P99Ms > s.Late {
 		ramping = false
-		rampCeiling = len(spawned)
+		rampCeiling = bouncers.Len()
 		rampDrawn = s.Drawn
 		return
 	}
@@ -314,7 +201,7 @@ func renderUI(e *wisp.Engine) {
 		e.Text(e.Width/2, e.Height/2, "Click to start", "white", "24px system-ui, sans-serif", "center")
 		return
 	}
-	status := "sprites " + itoa(len(spawned))
+	status := "sprites " + itoa(bouncers.Len())
 	switch {
 	case ramping:
 		status += "   ramping..."
