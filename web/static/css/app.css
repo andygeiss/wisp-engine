@@ -1,0 +1,86 @@
+@layer reset, tokens, base, layout, components, utilities;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body,
+  h1,
+  p {
+    margin: 0;
+  }
+}
+
+@layer tokens {
+  :root {
+    color-scheme: light dark;
+
+    /* Colors — light scheme. Roles, not values. */
+    --color-bg: oklch(99% 0.002 260);
+    --color-text: oklch(22% 0.02 260);
+
+    /* The canvas keeps a dark ground in both schemes: the game draws its
+       white "Loading…" and "Click to start" text on a cleared canvas. */
+    --color-canvas: oklch(18% 0.01 260);
+
+    --space: clamp(1rem, 0.5rem + 2vw, 2rem);
+    --font-body: system-ui, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: oklch(18% 0.01 260);
+      --color-text: oklch(93% 0.01 260);
+    }
+  }
+}
+
+@layer base {
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    min-block-size: 100dvb;
+  }
+}
+
+@layer layout {
+  main {
+    display: grid;
+    min-block-size: 100dvb;
+    padding: var(--space);
+    place-items: center;
+  }
+}
+
+@layer components {
+  /* The game renders at 640x360; CSS scales it to the viewport. Pixelated
+     scaling keeps the art crisp; the aspect ratio keeps it undistorted. */
+  canvas {
+    aspect-ratio: 16 / 9;
+    background: var(--color-canvas);
+    display: block;
+    image-rendering: pixelated;
+    inline-size: min(100%, 640px);
+  }
+
+  canvas:fullscreen {
+    inline-size: 100%;
+    object-fit: contain;
+  }
+}
+
+@layer utilities {
+  .visually-hidden {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+}
