@@ -73,9 +73,9 @@ open and press keys in.
 Two follow-ups, each gated on evidence rather than scheduled:
 
 - **A WebGL2 batched renderer**, if and when the number `B` produces is too low.
-  It is not: `B` reports 33,627 sprites at 60 fps. The overlay's *sort / draw*
-  row now splits the frame, so a rerun says how much of it a new renderer could
-  even reach.
+  It is not: `B` reports about 34,000 sprites at 60 fps over two runs, 9,045 of
+  them actually drawn. The overlay's *sort / draw* row splits the frame, so a
+  rerun says how much of it a new renderer could even reach.
 - **A native backend** for true OS-level CPU, RAM and GPU numbers. A whole
   second platform layer, and a large one.
 
@@ -417,31 +417,36 @@ on those would report a ceiling of zero.
 That number is the evidence that decides whether the WebGL2 batcher is worth
 writing, and it has now been produced.
 
-**The ceiling is 33,627 spawned sprites at 60 fps**, on Canvas2D, on the
-machine this was built on. That is far past what the follow-up was written to
-protect against, so **the WebGL2 batcher is not worth writing yet** — the
-evidence says the renderer is not the thing standing in a game's way.
+**The ceiling is about 34,000 spawned sprites at 60 fps**, on Canvas2D, on the
+machine this was built on. Two runs: 33,627, then 34,476 with 9,045 of them
+drawn — a spread of 2.5 per cent, which is close enough to call the number
+repeatable. That is far past what the follow-up was written to protect
+against, so **the WebGL2 batcher is not worth writing yet** — the evidence says
+the renderer is not the thing standing in a game's way.
 
-Two things qualify the number, and both point the same way:
+One thing qualifies the number, and it is the whole difference between the two
+figures the lab now prints:
 
-- **It counts entities, not draws.** The world is 1280x768 and the canvas is
-  640x360, so a quarter of it is on screen: at the ceiling roughly 34,600
-  entities exist and something near 8,100 of them are actually painted. The
-  overlay's *entities / drawn* row has the real pair; the ramp reports the
-  left-hand one.
-- **`drawMs` is not the renderer.** `Engine.draw` starts its clock before
-  `sortDrawOrder`, so the number called *draw* is the sort plus the draw plus
-  the game's own `RenderUI`. At 34,600 entities the stable sort is around half
-  a million comparisons a frame, thirty million a second, and none of that is
-  Canvas2D. A renderer swap would not touch it.
+- **The ceiling counts entities; only a quarter of them are painted.** The
+  world is 1280x768 behind a 640x360 canvas, which is 23.4 per cent of it by
+  area, and the measured share is 26.2 per cent — the excess is the floor,
+  always on screen and at most 252 tiles of it, plus the sprites the ramp has
+  only just spawned, which start inside the view. Take the floor out and 8,793
+  sprite draws carry a frame, from 34,476 that exist. **9,045 draws a frame is
+  the renderer's number; 34,476 is the frame's.**
 
-Both are now fixed rather than noted. `Stats.SortMs` times `sortDrawOrder`
-apart from `drawEntities`, so the overlay's *sort / draw* row says which of the
-two a slow frame went on — and only the second is the one a renderer swap would
-move. `Load` adds the sort back in, so measuring the frame more precisely does
-not make it look cheaper. The ramp records `Stats.Drawn` at the moment it
-stops, so the ceiling reports both numbers itself instead of leaving the
-reader to work the ratio out.
+The ramp records `Stats.Drawn` where it stops, which is where the second
+figure comes from; it used to be left to the reader, and the estimate this file
+carried before it was measured was ten per cent low.
+
+The other half is `Stats.SortMs`, which times `sortDrawOrder` apart from
+`drawEntities`. `Engine.draw` used to start its clock before the sort, so the
+number called *draw* was the sort plus the draw plus the game's own
+`RenderUI` — and at the ceiling there are 35,437 entities to sort every frame,
+around half a million comparisons, none of which is Canvas2D. The overlay's
+*sort / draw* row now says which of the two a frame went on. **That reading has
+not been taken yet**, and it is the one that would say whether a renderer swap
+could reach the cost at all.
 
 ## Aseprite sheets — milestone 5, not started
 
@@ -555,9 +560,10 @@ package spends the bytes.
    because the entity slices keep their capacity. If it is a constant,
    `ReadMemStats` is not filling `HeapAlloc` under TinyGo — delete the row rather
    than ship it.
-6. `B` — the ramp. Write down the sprite count where it stops. Done: 33,627,
-   which settles the WebGL2 decision for now. It adds 100 a second, so a
-   ceiling that high takes about six minutes to reach.
+6. `B` — the ramp. Write down the sprite count where it stops. Done twice:
+   33,627, then 34,476 with 9,045 drawn, which settles the WebGL2 decision for
+   now. It adds 100 a second, so a ceiling that high takes about six minutes to
+   reach. Still to read at the ceiling: the *sort / draw* row.
 7. `F` — fullscreen. The overlay and the menu are still there, because they are
    drawn inside the canvas. Anything that disappears was in the DOM.
 
