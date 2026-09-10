@@ -1,6 +1,7 @@
 // Package lab is what the lab's client and its server agree on: the world's
-// size, the sheet's rows, the three skills and their cooldowns, the bouncers
-// and the bounce that moves them, the floor and the edge of the world.
+// size, the art and its sheets, the three skills and their cooldowns, the
+// bouncers and the bounce that moves them, the floor and the edge of the
+// world.
 //
 // Nothing here touches a socket or the browser, so it builds and tests on the
 // host and compiles into the browser module unchanged. The server runs these
@@ -16,48 +17,6 @@ import (
 	"github.com/andygeiss/wisp-engine"
 )
 
-// Images, in the order LoadImages receives them.
-const (
-	ImageSprites = iota
-	ImageTiles
-)
-
-// Rows of the sheet, one animation each. They are game-jam-template's own
-// sheet, so the lab animates without anybody drawing anything new. A row is
-// also a tag's index, because the grid and the Aseprite export describe the
-// same twelve animations in the same order.
-const (
-	RowIdleRight = iota
-	RowIdleLeft
-	RowMoveRight
-	RowMoveLeft
-)
-
-// The sheet's shape, and the tag every bouncer plays.
-const (
-	SheetCols = 8
-	SheetRows = 12
-	FrameMS   = 100
-	TagRun    = "run-right"
-)
-
-// The world: a floor of tiles, and the layers actors stand on.
-const (
-	TileSize   = 32.0
-	TilesCols  = 40
-	TilesRows  = 24
-	TilesetCol = 3
-	TilesetRow = 5
-	FloorTile  = 4 // the floor tile of the template's tileset
-	WorldW     = TilesCols * TileSize
-	WorldH     = TilesRows * TileSize
-
-	// ZFloor is below every layer a bouncer lands on, so the floor never
-	// draws over an actor standing on it.
-	ZFloor  = -1
-	ZPlayer = 1
-)
-
 // The bouncers and the skills' numbers. Speeds are pixels per millisecond
 // and times are milliseconds, like everything in the engine.
 const (
@@ -66,7 +25,15 @@ const (
 	DashFactor   = 4.0
 	SpawnBatch   = 10
 	SpawnSpread  = 64.0
+	// StrikeDuration is how long the strike's animation plays, which is
+	// every frame of it once.
+	StrikeDuration = FramesStrike * FrameMS
 )
+
+// StateStrike marks a player mid-swing. It is the lab's own bit, above the
+// engine's, and it is in the row mask: while it is set the engine draws the
+// strike row and does not turn the player around.
+const StateStrike = uint64(1 << 16)
 
 // Skill is one of the three things a player can do besides move. They are
 // game-jam-template's keys and cooldowns, so the day that game is networked
@@ -120,53 +87,16 @@ func (s Skill) Cooldown() float64 {
 	return 0
 }
 
-// Sheet builds the lab's sprite sheet: the grid, with the four pose rows
-// named the way the Aseprite export names them. The lab builds it rather than
-// parsing web/static/img/lab.json because the export is 27 KB describing a
-// sheet whose every frame is the same size; a game with a packed sheet parses
-// its export instead, and the engine cannot tell the two apart.
-func Sheet() wisp.Sheet {
-	s := wisp.GridSheet(SheetCols, SheetRows, TileSize, TileSize, FrameMS)
-	s.Tags[RowIdleRight].Name = "idle-right"
-	s.Tags[RowIdleLeft].Name = "idle-left"
-	s.Tags[RowMoveRight].Name = TagRun
-	s.Tags[RowMoveLeft].Name = "run-left"
-	return s
-}
-
-// Rows maps a player's pose to the row that draws it.
-func Rows() map[uint64]int {
-	return map[uint64]int{
-		wisp.StateFaceRight | wisp.StateIdle: RowIdleRight,
-		wisp.StateFaceLeft | wisp.StateIdle:  RowIdleLeft,
-		wisp.StateFaceRight | wisp.StateMove: RowMoveRight,
-		wisp.StateFaceLeft | wisp.StateMove:  RowMoveLeft,
-	}
-}
-
-// Setup gives e the lab's sheet, its pose rows and its world size. Both
-// halves call it: the server so its players pick rows and its bouncers play
-// the right tag, the client so it draws what the server describes.
+// Setup gives e the lab's sheets, its eight-way facing, its pose rows and
+// its world size. Both halves call it: the server so its players pick rows
+// and its bouncers walk the right way, the client so it draws what the
+// server describes.
 func Setup(e *wisp.Engine) {
-	e.Sheets = []wisp.Sheet{Sheet()}
-	e.RowMask = wisp.MaskPose
+	e.Facing = NumDirections
+	e.Sheets = []wisp.Sheet{ImageHero: HeroSheet(), ImageFox: FoxSheet()}
+	e.RowMask = wisp.MaskPose | StateStrike
 	e.RowForState = Rows()
 	e.SetWorldSize(WorldW, WorldH)
-}
-
-// BuildFloor adds the floor: one tile per cell, all of them the same tile, on
-// [ZFloor]. The floor never moves and collides with nothing, so the server
-// never has one — each client builds its own and it never crosses the wire.
-func BuildFloor(e *wisp.Engine) {
-	tiles := make([]int, TilesCols*TilesRows)
-	for i := range tiles {
-		tiles[i] = FloorTile
-	}
-	e.AddTilemap(wisp.Tilemap{
-		Cols: TilesCols, Height: TileSize, Image: ImageTiles, Rows: TilesRows,
-		Tiles: tiles, TilesetCols: TilesetCol, TilesetRows: TilesetRow, Width: TileSize,
-		Z: ZFloor,
-	})
 }
 
 // ClampToWorld keeps entity i inside the world, sprite and all. The engine
@@ -188,25 +118,27 @@ type Player struct {
 	// Cooldown is how many milliseconds until each skill may fire again.
 	Cooldown [NumSkills]float64
 
-	e    *wisp.Engine
-	dash float64
+	e      *wisp.Engine
+	dash   float64
+	strike float64
 }
 
-// NewPlayer adds a player at the centre of the world and returns their rules.
+// NewPlayer adds a player at the centre of the world, facing south the way
+// a generated character is drawn first, and returns their rules.
 func NewPlayer(e *wisp.Engine) *Player {
 	i := e.Add(wisp.Sprite{
-		Height: TileSize, Image: ImageSprites,
-		State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateFaceRight |
+		Height: HeroH, Image: ImageHero, Row: Tag(HeroIdle, South),
+		State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateFaceDown |
 			wisp.StateIdle | wisp.StateVisible,
-		Width: TileSize, X: WorldW / 2, Y: WorldH / 2, Z: ZPlayer,
+		Width: HeroW, X: WorldW / 2, Y: WorldH / 2, Z: ZPlayer,
 	})
 	return &Player{Entity: i, e: e}
 }
 
-// Tick runs the cooldowns and the dash down by dt milliseconds and keeps the
-// player inside the world. Call it once per tick, after the engine has moved
-// the entity, so a dash ends on the tick its time runs out and a step past
-// the edge is taken back the same tick.
+// Tick runs the cooldowns, the dash and the strike down by dt milliseconds
+// and keeps the player inside the world. Call it once per tick, after the
+// engine has moved the entity, so a dash ends on the tick its time runs out
+// and a step past the edge is taken back the same tick.
 func (p *Player) Tick(dt float64) {
 	for s := range p.Cooldown {
 		p.Cooldown[s] = max(p.Cooldown[s]-dt, 0)
@@ -218,6 +150,13 @@ func (p *Player) Tick(dt float64) {
 			p.e.SpeedFactor[p.Entity] = 1
 		}
 	}
+	if p.strike > 0 {
+		p.strike -= dt
+		if p.strike <= 0 {
+			p.strike = 0
+			p.e.State[p.Entity] &^= StateStrike
+		}
+	}
 	ClampToWorld(p.e, p.Entity)
 }
 
@@ -226,10 +165,11 @@ func (p *Player) Ready(s Skill) bool { return s < NumSkills && p.Cooldown[s] <= 
 
 // Fire runs s if it is ready, starts its cooldown, and reports whether it
 // fired. A strike deletes every bouncer whose hit box overlaps the player's
-// and returns them; a spawn adds up to [SpawnBatch] bouncers around the
-// player, fewer at the cap, and returns those; a dash makes the player
-// [DashFactor] times as fast for [DashDuration] and returns nothing. A press
-// on cooldown does nothing at all, whatever sent it.
+// and returns them, and plays the swing for [StrikeDuration]; a spawn adds
+// up to [SpawnBatch] bouncers around the player, fewer at the cap, and
+// returns those; a dash makes the player [DashFactor] times as fast for
+// [DashDuration] and returns nothing. A press on cooldown does nothing at
+// all, whatever sent it.
 func (p *Player) Fire(s Skill, b *Bouncers) (affected []int, fired bool) {
 	if !p.Ready(s) {
 		return nil, false
@@ -237,6 +177,8 @@ func (p *Player) Fire(s Skill, b *Bouncers) (affected []int, fired bool) {
 	p.Cooldown[s] = s.Cooldown()
 	switch s {
 	case Strike:
+		p.e.State[p.Entity] |= StateStrike
+		p.strike = StrikeDuration
 		return b.Struck(p.Entity), true
 	case Spawn:
 		x, y := p.e.X[p.Entity], p.e.Y[p.Entity]
@@ -280,25 +222,23 @@ func (b *Bouncers) Len() int { return len(b.idx) }
 
 // Add spawns one bouncer at (x, y) with a random velocity, a random layer, a
 // random starting frame and a random opacity from 60 to 100 per cent — all of
-// which make it cost something to draw, which is what it is for. It returns
-// the entity's index, or -1 at the cap.
+// which make it cost something to draw, which is what it is for. It walks
+// the way it is going. It returns the entity's index, or -1 at the cap.
 func (b *Bouncers) Add(x, y float64) int {
 	if b.Max > 0 && len(b.idx) >= b.Max {
 		return -1
 	}
+	vx, vy := (rand.Float64()*2-1)*BounceSpeed, (rand.Float64()*2-1)*BounceSpeed
 	i := b.e.Add(wisp.Sprite{
 		Alpha:  0.6 + rand.Float64()*0.4,
-		Height: TileSize, Image: ImageSprites, Row: RowMoveRight,
+		Height: FoxH, Image: ImageFox, Row: Tag(FoxWalk, DirectionOf(vx, vy)),
 		State: wisp.StateAnimated | wisp.StateAnimatedLoop | wisp.StateVisible,
-		Width: TileSize, X: x, Y: y, Z: rand.IntN(3),
+		Width: FoxW, X: x, Y: y, Z: rand.IntN(3),
 	})
-	// Row already names the animation by number; Play names it by its tag
-	// when the sheet is there, so the sheet path is the one that runs.
-	b.e.Play(i, TagRun)
-	b.e.FrameOffset[i] = rand.IntN(SheetCols)
+	b.e.FrameOffset[i] = rand.IntN(FramesWalk)
 	b.idx = append(b.idx, i)
-	b.vx = append(b.vx, (rand.Float64()*2-1)*BounceSpeed)
-	b.vy = append(b.vy, (rand.Float64()*2-1)*BounceSpeed)
+	b.vx = append(b.vx, vx)
+	b.vy = append(b.vy, vy)
 	return i
 }
 
@@ -311,10 +251,12 @@ func (b *Bouncers) Velocity(i int) (vx, vy float64) {
 	return 0, 0
 }
 
-// SetVelocity launches bouncer i at (vx, vy) pixels per millisecond.
+// SetVelocity launches bouncer i at (vx, vy) pixels per millisecond, and
+// turns its sprite to walk that way.
 func (b *Bouncers) SetVelocity(i int, vx, vy float64) {
 	if n := slices.Index(b.idx, i); n >= 0 {
 		b.vx[n], b.vy[n] = vx, vy
+		b.e.ImageRow[i] = Tag(FoxWalk, DirectionOf(vx, vy))
 	}
 }
 
@@ -366,17 +308,26 @@ func (b *Bouncers) Struck(by int) (hit []int) {
 }
 
 // Simulate moves every bouncer by dt milliseconds and turns it around at the
-// world's edges. Call it from [wisp.Engine.Simulate], so it runs on the tick.
+// world's edges — the sprite too, so it keeps walking the way it goes. Call
+// it from [wisp.Engine.Simulate], so it runs on the tick.
 func (b *Bouncers) Simulate(dt float64) {
 	e := b.e
 	for n, i := range b.idx {
 		e.X[i] += b.vx[n] * dt
 		e.Y[i] += b.vy[n] * dt
+		turned := false
 		if e.X[i] < 0 || e.X[i] > WorldW {
 			b.vx[n] = -b.vx[n]
+			turned = true
 		}
 		if e.Y[i] < 0 || e.Y[i] > WorldH {
 			b.vy[n] = -b.vy[n]
+			turned = true
+		}
+		if turned {
+			// The row alone: the frame keeps counting, so the stride does
+			// not restart at every wall.
+			e.ImageRow[i] = Tag(FoxWalk, DirectionOf(b.vx[n], b.vy[n]))
 		}
 	}
 }

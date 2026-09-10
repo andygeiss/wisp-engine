@@ -25,12 +25,12 @@ const (
 
 func main() {
 	e := wisp.New(wisp.Config{})
-	e.LoadImages("/static/img/lab.png", "/static/img/tiles.png")
+	e.LoadImages(lab.Images[:]...)
 
-	// The sheet, the pose rows and the world size are the lab's rules, shared
-	// with the server. The tileset gets no sheet and so keeps the grid
-	// convention, which is what a tilemap wants: it indexes its tiles with
-	// its own rows and columns, and none of them is an animation.
+	// The sheets, the eight-way facing, the pose rows and the world size
+	// are the lab's rules, shared with the server. The tilesets and the
+	// props get no sheet and so keep the grid convention: a tilemap indexes
+	// its tiles with its own rows and columns, and a prop is one frame.
 	lab.Setup(e)
 
 	// An exact match rather than strings.Contains: the query is ours to spell,

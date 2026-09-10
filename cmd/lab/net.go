@@ -53,8 +53,10 @@ func runNet(e *wisp.Engine) {
 	// Nothing here is steered or posed by this engine: every actor is the
 	// server's, and it arrives with its bits already set.
 	e.InputTarget, e.RowMask = -1, 0
-	// The floor never crosses the wire; every client builds its own.
+	// The floor and the props never cross the wire; every client builds
+	// its own.
 	lab.BuildFloor(e)
+	lab.BuildProps(e)
 	n.r.OnEvent = n.onEvent
 	e.Simulate = func(float64) { n.r.Tick() }
 	e.RenderUI = n.render

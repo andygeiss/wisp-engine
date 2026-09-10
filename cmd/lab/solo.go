@@ -63,9 +63,9 @@ var (
 	settled   float64
 )
 
-// build lays out the scene: a floor, a player, and nothing else. Everything
-// after that is spawned by hand, so the count on screen is the count you asked
-// for.
+// build lays out the scene: the floor, the props, a player, and nothing
+// else. Everything after that is spawned by hand, so the count on screen is
+// the count you asked for.
 func build(e *wisp.Engine) {
 	e.Reset()
 	bouncers = lab.NewBouncers(e, 0)
@@ -75,6 +75,7 @@ func build(e *wisp.Engine) {
 	// hide it behind them: inside one layer the sort is by baseline, so each
 	// tile below a sprite's middle draws after it and repaints its lower half.
 	lab.BuildFloor(e)
+	lab.BuildProps(e)
 	player = lab.NewPlayer(e).Entity
 	e.CamTarget, e.InputTarget = player, player
 }

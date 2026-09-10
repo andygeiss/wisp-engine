@@ -11,11 +11,13 @@ import (
 	"github.com/andygeiss/wisp-engine"
 )
 
-// exportPath is the sheet "make sheets" writes. The tests read the real file
-// rather than a hand-written copy of it: a fixture somebody typed only proves
-// the parser agrees with a guess about the format, and the guess is the part
-// most likely to be wrong.
-const exportPath = "web/static/img/lab.json"
+// exportPath is a real Aseprite export — the lab's old sheet, written by
+// Aseprite 1.3 with the command ParseSheet documents — kept as the parser's
+// fixture now that the lab draws PixelLab's art. The tests read a real file
+// rather than a hand-written copy of one: a fixture somebody typed only
+// proves the parser agrees with a guess about the format, and the guess is
+// the part most likely to be wrong.
+const exportPath = "testdata/aseprite/lab.json"
 
 // readExport returns the committed Aseprite export.
 func readExport(t *testing.T) []byte {
@@ -97,8 +99,8 @@ func TestParseSheetReadsTheTags(t *testing.T) {
 // TestGridSheetMatchesTheExport is the backwards-compatibility proof: the grid
 // convention and the Aseprite export describe the same pixels, frame for
 // frame. It is what says a game may move to a sheet without its sprites
-// moving, and it is why "make sheets" exports at the grid width rather than
-// packing.
+// moving, and it is why the fixture was exported at the grid width rather
+// than packed.
 func TestGridSheetMatchesTheExport(t *testing.T) {
 	t.Parallel()
 
@@ -370,7 +372,7 @@ func TestSheetEndsAOneShotAfterItsOwnFrames(t *testing.T) {
 }
 
 func ExampleParseSheet() {
-	// In a game this is the file "make sheets" wrote, fetched next to the PNG.
+	// In a game this is the file Aseprite exported, fetched next to the PNG.
 	const export = `{
 	  "frames": [
 	    {"frame": {"x": 0, "y": 0, "w": 32, "h": 32}, "duration": 100},

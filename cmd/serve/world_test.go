@@ -260,7 +260,7 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 			if !(spawns[0].Slot == w1.You && spawns[1].Slot == w2.You) {
 				t.Errorf("player %d got spawns for %d and %d, want %d then %d", i, spawns[0].Slot, spawns[1].Slot, w1.You, w2.You)
 			}
-			if s := spawns[0]; s.Width != lab.TileSize || s.State&wisp.StateVisible == 0 || s.Alpha != 255 || s.Z != lab.ZPlayer {
+			if s := spawns[0]; s.Width != lab.HeroW || s.State&wisp.StateVisible == 0 || s.Alpha != 255 || s.Z != lab.ZPlayer {
 				t.Errorf("a player's spawn is %+v", s)
 			}
 			snap := one[wire.Snapshot](t, f)
@@ -293,7 +293,7 @@ func TestAnIntentMovesThePlayerBySpeedTimesStep(t *testing.T) {
 		if !near(me.X, lab.WorldW/2+step) || me.Y != lab.WorldH/2 {
 			t.Errorf("after one tick right the player is at (%v, %v), want (%v, %v)", me.X, me.Y, lab.WorldW/2+step, lab.WorldH/2)
 		}
-		if me.State&wisp.StateMoveRight == 0 || me.State&wisp.StateMove == 0 || me.Row != lab.RowMoveRight {
+		if me.State&wisp.StateMoveRight == 0 || me.State&wisp.StateMove == 0 || me.Row != uint8(lab.Tag(lab.HeroWalk, lab.East)) {
 			t.Errorf("a moving player has state %#x row %d", me.State, me.Row)
 		}
 
@@ -308,7 +308,7 @@ func TestAnIntentMovesThePlayerBySpeedTimesStep(t *testing.T) {
 		synctest.Wait()
 		a.w.Tick()
 		me = actor(t, one[wire.Snapshot](t, frame(t, p)), you)
-		if !near(me.X, lab.WorldW/2+2*step) || me.State&wisp.StateIdle == 0 || me.Row != lab.RowIdleRight {
+		if !near(me.X, lab.WorldW/2+2*step) || me.State&wisp.StateIdle == 0 || me.Row != uint8(lab.Tag(lab.HeroIdle, lab.East)) {
 			t.Errorf("after letting go x = %v state %#x row %d, want it idle where it was", me.X, me.State, me.Row)
 		}
 	})
