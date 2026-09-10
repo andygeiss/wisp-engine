@@ -2265,6 +2265,17 @@ generations and a `make art` the day it matters.
 **Committed in the order it was built**, one commit a step — the facing,
 the export reader, the art tool and the art, the lab, the record — after
 the overlay fix that was waiting in the same tree, and tagged `v0.3.0`.
+Running every commit's own tree through the gate before the tag found
+one flake that was milestone 7's: `TestAClientThatStopsReadingIsClosed`
+failed about one run in four under `-race` and one in three without, on
+the commit before this milestone as much as after. The test ticks the
+world `outboundQueue + 2` times while a second player watches, and never
+yields, so whether that player's writer got a turn before their own queue
+filled was the scheduler's call; when it did not, the watcher was closed
+as the slow one. A `synctest.Wait` after each tick lets the watcher drain
+what the tick sent them, the way a reading client does between ticks,
+and forty runs both ways then passed. It was named on the list first and
+fixed in the commit after, before the tag.
 
 ### Verification
 
@@ -2314,17 +2325,6 @@ committed and tagged `v0.3.0`, so *Gates* speaks for that commit.
    that says whether a renderer swap could reach the cost at all. Six minutes
    of `B` in a real window; a headless compositor's frame times are not
    comparable. Andy.
-6. **The slow-client test leans on a timing.**
-   `TestAClientThatStopsReadingIsClosed` passes under `-race`, which is what
-   every gate runs, and fails about one run in three without it: the player
-   who is supposed to watch the slow one leave is closed as too slow
-   himself, because the test ticks `outboundQueue + 2` times without
-   reading his frames, and whether his writer has taken a batch off the
-   queue by then is the scheduler's call. Found on 2026-09-10, running each
-   of milestone 8's commits plain, and it fails the same way on the commit
-   before them, so it is milestone 7's. Read the player's frames while the
-   queue fills, or tick one fewer; either way the test says what it checks.
-   Whoever.
 ## What this does not do
 
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second

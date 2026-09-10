@@ -439,8 +439,14 @@ func TestAClientThatStopsReadingIsClosed(t *testing.T) {
 		}
 
 		// The slow one's queue fills a batch a tick, and the world moves on.
+		// The wait after each tick lets the player who is watching drain
+		// what the tick sent them, the way a reading client does between
+		// ticks; without it, whether their writer got a turn before the
+		// queue filled was the scheduler's call, and about one run in four
+		// closed them as the slow one.
 		for range outboundQueue + 2 {
 			a.w.Tick()
+			synctest.Wait()
 		}
 		// Its writer is stuck on a socket nobody reads; the write deadline
 		// ends that, the socket closes, its reader posts the leave, and the
