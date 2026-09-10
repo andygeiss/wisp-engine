@@ -2314,6 +2314,17 @@ committed and tagged `v0.3.0`, so *Gates* speaks for that commit.
    that says whether a renderer swap could reach the cost at all. Six minutes
    of `B` in a real window; a headless compositor's frame times are not
    comparable. Andy.
+6. **The slow-client test leans on a timing.**
+   `TestAClientThatStopsReadingIsClosed` passes under `-race`, which is what
+   every gate runs, and fails about one run in three without it: the player
+   who is supposed to watch the slow one leave is closed as too slow
+   himself, because the test ticks `outboundQueue + 2` times without
+   reading his frames, and whether his writer has taken a batch off the
+   queue by then is the scheduler's call. Found on 2026-09-10, running each
+   of milestone 8's commits plain, and it fails the same way on the commit
+   before them, so it is milestone 7's. Read the player's frames while the
+   queue fills, or tick one fewer; either way the test says what it checks.
+   Whoever.
 ## What this does not do
 
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second
