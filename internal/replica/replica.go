@@ -27,6 +27,13 @@ const (
 	// fastForwardAbove is the depth past which a tick applies two snapshots,
 	// closing the gap in a few ticks rather than in one pop.
 	fastForwardAbove = 2
+	// drainAfter is how many ticks in a row may find fastForwardAbove
+	// snapshots before one of them applies two. A fast-forward stops at that
+	// depth and a slow clock drifts up to it, and either leaves the client a
+	// tick further behind for good; an early snapshot puts the queue there
+	// for one tick and the late one takes it back. Thirty ticks is a second
+	// at the 30 Hz the wire runs, which no jitter lasts.
+	drainAfter = 30
 	// catchUpAbove is the depth of a tab that slept: everything is applied at
 	// once, because a minute of fast-forward is worse than one jump.
 	catchUpAbove = 64
@@ -64,17 +71,25 @@ type Replica struct {
 	Err error
 
 	// The numbers the lab prints: how often a tick had nothing to apply,
-	// applied two, or applied everything; how many snapshots it has applied;
-	// and the server tick of the last one.
+	// applied two, took a lasting surplus back, or applied everything; how
+	// many snapshots it has applied; and the server tick of the last one.
 	Held         int
 	FastForwards int
+	Drains       int
 	CatchUps     int
 	Applied      int
 	LastTick     uint32
 
+	// LastDepth is how many snapshots the last tick found waiting, before it
+	// applied any: the number the rule judged. A HUD prints this one rather
+	// than [Replica.Depth], which fills between the frames of one tick and
+	// so flips with where the snapshot landed.
+	LastDepth int
+
 	queue     []wire.Message
 	head      int
 	snapshots int
+	surplus   int // ticks in a row that found fastForwardAbove snapshots
 	slots     map[uint16]int
 }
 
@@ -120,10 +135,17 @@ func (r *Replica) You() int {
 }
 
 // Tick applies the server's messages by the depth rule: up to and including
-// one snapshot in the usual case, two when the queue has run ahead, all of
-// them when a tab slept, and nothing at all when the queue is empty — a
-// freeze, not a guess. Hand it to the engine as Simulate.
+// one snapshot in the usual case, two when the queue has run ahead or has
+// held one more than it needs for a second, all of them when a tab slept,
+// and nothing at all when the queue is empty — a freeze, not a guess. Hand
+// it to the engine as Simulate.
 func (r *Replica) Tick() {
+	r.LastDepth = r.snapshots
+	if r.snapshots == fastForwardAbove {
+		r.surplus++
+	} else {
+		r.surplus = 0
+	}
 	frames := 1
 	switch {
 	case r.snapshots == 0:
@@ -137,6 +159,10 @@ func (r *Replica) Tick() {
 	case r.snapshots > fastForwardAbove:
 		frames = 2
 		r.FastForwards++
+	case r.surplus >= drainAfter:
+		frames = 2
+		r.surplus = 0
+		r.Drains++
 	}
 	for range frames {
 		r.frame()

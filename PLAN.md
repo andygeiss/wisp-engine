@@ -133,7 +133,7 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **done** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers of step 9 measured with a bot the same day and written into its *Verification*; tagged `v0.2.0`. The blend of step 0 was measured in a headless Chrome on 2026-09-10 and holds; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **done** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers of step 9 measured with a bot the same day and written into its *Verification*; tagged `v0.2.0`. The blend of step 0 was measured in a headless Chrome on 2026-09-10 and holds; the buffer after a hit stop was found and fixed the same day, tagged `v0.3.1`; the brief, the decisions and the order are below |
 | 8. PixelLab is the art source | **done** — decided and built 2026-09-10, for 46 generations; every gate green, 278,777 bytes; drawn in a headless Chrome and played by Andy the same day; tagged `v0.3.0`. *PixelLab — milestone 8* is the brief, the decisions and the record |
 
 Three follow-ups, each gated on evidence rather than scheduled:
@@ -199,8 +199,9 @@ packages: 147 tests, 5 examples, and 4 fuzz targets with their seeds —
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 278,777 bytes — 272
+`make wasm` has run. `web/static/lab.wasm` is committed at 279,073 bytes — 273
 KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
+The buffer's drain and the found depth on the HUD put 296 on, 2026-09-10.
 Milestone 8 put 4,346 on: 168 for the facing, and 4,178 for the lab's art —
 the direction table, the two sheets, the autotiler and the level, the
 bouncers turning their sprite, the strike's bit. The
@@ -1736,16 +1737,22 @@ build that does not yet talk to anybody.
   The target depth is one snapshot. An empty queue holds for a tick, which is
   a freeze and not a guess. More than two queued applies two per tick — a
   brief fast-forward rather than a pop. More than 64, which is a tab that
-  slept, applies everything at once.
+  slept, applies everything at once. Exactly two queued for thirty ticks in
+  a row — a second at 30 Hz — applies two once, the drain: a fast-forward
+  stops at two and a slow clock drifts up to it, and either would leave the
+  client a tick further behind for good, while an early snapshot is two for
+  one tick and never counts. The drain came on 2026-09-10; *The buffer after
+  a hit stop* under *Verification* says what it fixed.
 - **A hit stop still freezes the picture**, because it stops the client's
-  ticks, and the buffer pays it back at double speed afterwards. `P` is gone
-  in network mode: the server's world does not pause. `B`, `]` and `[` are
-  solo-only.
+  ticks, and the buffer pays it back afterwards: at double speed down to two,
+  and the last one by the drain a second later. `P` is gone in network mode:
+  the server's world does not pause. `B`, `]` and `[` are solo-only.
 - **The HUD** is three cooldown bars from the `You` message, a marker over
   your own sprite at `DrawPos`, and a net line, which is the lab doing its job
-  again: `rtt`, `in KB/s`, `snapshot B`, `buffer`, and how often it held or
-  fast-forwarded. Your own skills fire `e.Impact(e.Feel.Light)` when their
-  Event comes back; other people's do not.
+  again: `rtt`, `in KB/s`, `snapshot B`, `buffer` — the depth the tick found,
+  not the queue as a frame sees it — and how often it held, fast-forwarded or
+  drained. Your own skills fire `e.Impact(e.Feel.Light)` when their Event
+  comes back; other people's do not.
 - **`socket.go`** is the one `syscall/js` file outside the engine: a WebSocket
   with `binaryType` set to `arraybuffer`, whose `onmessage` copies the bytes
   out with `js.CopyBytesToGo` and appends them to the queue. No goroutine and
@@ -1788,7 +1795,7 @@ nothing but hand bytes to Go. Network mode is what *The client* above says:
 knob every frame, the camera on your entity once its Spawn has come, and a
 HUD of a marker over you, three cooldown bars from the server's copy, and the
 net line — `rtt`, `in KB/s`, `snapshot B`, `buffer`, `held`, `ff`, `catch`
-and the server's tick.
+and the server's tick, with `drain` beside `ff` since 2026-09-10.
 
 **It cost 31,736 bytes, against a ceiling of 10 KB, and the ceiling was a
 probe of the socket alone.** `make wasm` went from 242,081 to 273,817. The
@@ -1988,6 +1995,37 @@ Each step is green on its own and is its own commit.
   largest crowd the flag allows. The follow-ups *The wire* names — sending
   only what changed, and only what is near — have their number, and it says
   neither is needed for a crowd of a thousand on a machine like this one.
+
+  **The buffer after a hit stop, found 2026-09-10.** Andy pressed `E` and
+  the HUD's `buffer` flapped between 1 and 2 every frame until he pressed it
+  again. The minute at rest above never saw it because nobody pressed a
+  key. Two defects, both reproduced on the host with the engine's own
+  `Step` at 60 frames a second against a simulated 30 Hz server, in what is
+  now `TestAHitStopIsPaidBackToOneSnapshot`. First, the payback stopped one
+  short: the light impact a skill of your own plays is a 70 ms freeze,
+  which at 60 Hz holds the engine for five frames — two and a half server
+  ticks — and the fast-forward that follows fires only above two queued,
+  so it left two, and nothing took the queue from two back to one. Every
+  skill of your own, and every impact key, left the client one server tick
+  further behind — 33 ms — for the rest of the session. Second, the HUD
+  read the queue as the frame saw it, which fills between the two frames of
+  one tick, so the number flipped whenever the snapshot landed in the first
+  half of a tick; a freeze of two and a half ticks moves that landing by
+  half a tick, which is why the second press hid it and the third would
+  have shown it again. The fix is the drain in *The client* — exactly two
+  queued for thirty ticks in a row applies two once, and an early snapshot,
+  two for one tick, starts the count over — and `buffer` now prints the
+  depth the tick found, with `drain` beside `ff`. On the host, in both
+  halves of the tick: at rest the tick finds one; after the stop it finds
+  three or four, then two, and one again within a second, with nothing
+  held; and the found depth never flips between two frames, where the live
+  queue did in one of the two phases. At rest the HUD now reads `buffer 1`,
+  the target the rule names, where it used to read 0. A headless Chrome
+  against the rebuilt module read 1 at rest, 2 half a second after `E`
+  with two fast-forwards, and 1 again with one drain by the time the
+  cooldown bar had refilled, twice over; Andy pressed `E` twice the same
+  day and it worked. Committed with `make ci` green on the commit, and
+  tagged `v0.3.1`.
 
 ### Baseline gaps
 

@@ -173,9 +173,11 @@ The three skills cool down for one, three and five seconds, and the cooldowns
 live on the server: a key held down does nothing until the server says so.
 The bars at the bottom right are the server's copy of them, and the line
 above the keys says what the wire costs — the round trip, the bytes a second,
-the size of a snapshot, and how often the tab had to wait for one or catch
-up. Nudging `World.Speed` in one tab's menu changes nothing in the world,
-because the tab does not simulate it.
+the size of a snapshot, how many snapshots were waiting when the tick ran,
+which is one when all is well, and how often the tab had to wait for one,
+apply two to catch up, or let a spare go that had lasted a second. Nudging
+`World.Speed` in one tab's menu changes nothing in the world, because the tab
+does not simulate it.
 
 Add `?solo` to the URL — <http://127.0.0.1:8080/?solo> — for the scene on
 your machine alone, which is the one the ramp measures:

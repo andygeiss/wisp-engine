@@ -220,10 +220,12 @@ func (n *netMode) render() {
 		y += rowH
 	}
 
-	// The net line, and the keys.
+	// The net line, and the keys. The buffer is the depth the tick found,
+	// not the queue as it stands: the queue fills between the frames of one
+	// tick, so read from a frame it flips with where the snapshot landed.
 	line := "rtt " + ftoa(n.rtt) + " ms   in " + ftoa(n.kbps) + " KB/s   snapshot " + itoa(n.snapshotBytes) + " B" +
-		"   buffer " + itoa(n.r.Depth()) + "   held " + itoa(n.r.Held) + "   ff " + itoa(n.r.FastForwards) +
-		"   catch " + itoa(n.r.CatchUps) + "   tick " + itoa(int(n.r.LastTick))
+		"   buffer " + itoa(n.r.LastDepth) + "   held " + itoa(n.r.Held) + "   ff " + itoa(n.r.FastForwards) +
+		"   drain " + itoa(n.r.Drains) + "   catch " + itoa(n.r.CatchUps) + "   tick " + itoa(int(n.r.LastTick))
 	e.Text(8, e.Height-24, line, "white", font, "left")
 	e.Text(8, e.Height-10,
 		"Q strike   E spawn   R dash   1 2 3 impact   M tune   H metrics   F full   ?solo for the ramp",

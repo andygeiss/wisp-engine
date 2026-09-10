@@ -173,6 +173,73 @@ func TestTheDepthRule(t *testing.T) {
 			t.Errorf("last %d depth %d catch-ups %d fast-forwards %d pending %d", r.LastTick, r.Depth(), r.CatchUps, r.FastForwards, r.Pending())
 		}
 	})
+	t.Run("two waiting for a second applies two once", func(t *testing.T) {
+		t.Parallel()
+		e, r := queued(t, 2)
+		// One applied and one arrived a tick, so every tick finds two: what
+		// a fast-forward leaves behind, or a clock that drifted. Thirty is a
+		// second at the wire's 30 Hz.
+		for k := 1; k < 30; k++ {
+			e.Tick(step)
+			if r.LastDepth != 2 || r.Depth() != 1 || r.Drains != 0 {
+				t.Fatalf("tick %d found %d, left %d, drains %d; want 2, 1, 0", k, r.LastDepth, r.Depth(), r.Drains)
+			}
+			r.Push(snapshot(uint32(k+2), wire.Actor{Slot: 1, X: float32(k + 2), State: wisp.StateVisible}))
+		}
+		e.Tick(step)
+		if r.LastDepth != 2 || r.Depth() != 0 || r.Drains != 1 || r.FastForwards != 0 {
+			t.Fatalf("the thirtieth tick found %d, left %d, drains %d, fast-forwards %d; want 2, 0, 1, 0", r.LastDepth, r.Depth(), r.Drains, r.FastForwards)
+		}
+		// From here on a tick finds the one it likes, and nothing holds.
+		r.Push(snapshot(32, wire.Actor{Slot: 1, X: 32, State: wisp.StateVisible}))
+		e.Tick(step)
+		if r.LastDepth != 1 || r.Depth() != 0 || r.Held != 0 || r.Drains != 1 {
+			t.Errorf("after the drain a tick found %d, left %d, held %d, drains %d; want 1, 0, 0, 1", r.LastDepth, r.Depth(), r.Held, r.Drains)
+		}
+	})
+	t.Run("an early snapshot is two for one tick and starts the count over", func(t *testing.T) {
+		t.Parallel()
+		e, r := queued(t, 1)
+		next := uint32(2)
+		arrive := func() {
+			r.Push(snapshot(next, wire.Actor{Slot: 1, X: float32(next), State: wisp.StateVisible}))
+			next++
+		}
+		tick := func(want int) {
+			t.Helper()
+			e.Tick(step)
+			if r.LastDepth != want || r.Drains != 0 {
+				t.Fatalf("before snapshot %d the tick found %d, drains %d; want %d, 0", next, r.LastDepth, r.Drains, want)
+			}
+		}
+		// At rest one arrives and the tick finds it. An early one lands with
+		// its predecessor still waiting, and the tick after it has nothing
+		// new.
+		tick(1)
+		arrive()
+		arrive()
+		tick(2)
+		tick(1)
+		// Twenty-nine at two, one at one, twenty-nine at two: the count
+		// starts over at the one, so the thirtieth of the second run is the
+		// first to take anything back.
+		arrive()
+		for range 29 {
+			arrive()
+			tick(2)
+		}
+		tick(1)
+		arrive()
+		for range 29 {
+			arrive()
+			tick(2)
+		}
+		arrive()
+		e.Tick(step)
+		if r.LastDepth != 2 || r.Depth() != 0 || r.Drains != 1 || r.FastForwards != 0 || r.Held != 0 {
+			t.Errorf("the thirtieth in a row found %d, left %d, drains %d, fast-forwards %d, held %d; want 2, 0, 1, 0, 0", r.LastDepth, r.Depth(), r.Drains, r.FastForwards, r.Held)
+		}
+	})
 	t.Run("nothing waiting before the first snapshot is loading, not a hold", func(t *testing.T) {
 		t.Parallel()
 		e, r := newReplica(t)
@@ -285,5 +352,68 @@ func TestAPongIsNotTheWorlds(t *testing.T) {
 	r.Push(wire.Pong{T: 1, Tick: 2})
 	if r.Pending() != 0 {
 		t.Error("a Pong was queued for the world")
+	}
+}
+
+// A skill of your own plays a light hit stop, which holds the engine for
+// five frames at 60 Hz: two and a half server ticks of snapshots pile up. The
+// fast-forward takes them down to two, the drain takes the last one back
+// within a second, and the depth the tick found — the number the HUD prints
+// — never flips between the two frames of one tick, where the live queue
+// does whenever the snapshot lands in the first half of a tick.
+func TestAHitStopIsPaidBackToOneSnapshot(t *testing.T) {
+	t.Parallel()
+	const frame = 1000.0 / 60
+	flipped := false
+	for _, phase := range []float64{step / 4, 3 * step / 4} {
+		e, r := newReplica(t)
+		r.Push(spawn(1, 0, 0))
+		next, tick := phase, uint32(1)
+		arrive := func(now float64) {
+			for next <= now {
+				r.Push(snapshot(tick, wire.Actor{Slot: 1, X: float32(tick), State: wisp.StateVisible}))
+				tick++
+				next += step
+			}
+		}
+		now := 0.0
+		run := func(frames int, each func()) {
+			for range frames {
+				arrive(now)
+				e.Step(frame)
+				now += frame
+				if each != nil {
+					each()
+				}
+			}
+		}
+
+		run(120, nil) // two seconds to settle
+		if r.LastDepth != 1 || r.Held != 0 || r.FastForwards != 0 || r.Drains != 0 {
+			t.Fatalf("phase %v: at rest the tick found %d, held %d, fast-forwards %d, drains %d; want 1, 0, 0, 0", phase, r.LastDepth, r.Held, r.FastForwards, r.Drains)
+		}
+
+		e.Impact(e.Feel.Light)
+		// The stop is five frames, the fast-forward two or four, and the
+		// second at two sixty: the drain has fired by seventy. A second and
+		// a half leaves room.
+		run(90, nil)
+		found, live := map[int]bool{}, map[int]bool{}
+		run(60, func() {
+			found[r.LastDepth] = true
+			live[r.Depth()] = true
+		})
+		if r.Drains != 1 || r.FastForwards == 0 || r.Held != 0 {
+			t.Errorf("phase %v: after the stop drains %d, fast-forwards %d, held %d; want 1, some, 0", phase, r.Drains, r.FastForwards, r.Held)
+		}
+		if len(found) != 1 || !found[1] {
+			t.Errorf("phase %v: in the second after the stop was paid back the tick found %v, want only 1", phase, found)
+		}
+		if len(live) > 1 {
+			flipped = true
+		}
+	}
+	if !flipped {
+		t.Error("the live queue never flipped between two frames of one tick, so the HUD would not have needed LastDepth")
 	}
 }
