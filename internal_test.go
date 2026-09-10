@@ -1,6 +1,7 @@
 package wisp
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -399,6 +400,92 @@ func TestMenuTextFits(t *testing.T) {
 		line := k.Field + " " + k.text(&e.Settings)
 		if n := utf8.RuneCountInString(line); n > rowCols {
 			t.Errorf("row %q is %d columns, over the %d a knob row has", line, n, rowCols)
+		}
+	}
+}
+
+func TestMetricsTextFits(t *testing.T) {
+	t.Parallel()
+	// A row's label is drawn from the left edge and its value from the right,
+	// so a pair wider than the panel is not clipped to it: the value is
+	// painted over the label. "cpu / gpu load" read "cpu / gpu n/ad— not
+	// exposed by browsers" that way, a 29-column value under a 14-column
+	// label. The widest each value can be is what has to fit, with a space
+	// between the two.
+	wide := Stats{
+		Budget: 999.9, DrawMs: 999.9, Drawn: 99999, Entities: 99999, FPS: 999.9,
+		GoHeapBytes: 1023*1024 + 1000, Late: 999.9, Load: 9.99, P50Ms: 999.9,
+		P99Ms: 999.9, SortMs: 999.9, UpdateMs: 999.9, WasmMemoryBytes: 1023*1024 + 1000,
+	}
+	for _, r := range metricsRows(wide) {
+		n := utf8.RuneCountInString(r.label) + 1 + utf8.RuneCountInString(r.value)
+		if n > hudCols {
+			t.Errorf("row %q %q is %d columns with a space between, over the %d that fit", r.label, r.value, n, hudCols)
+		}
+	}
+
+	// The GPU line is one string from the left, and what the browser reports
+	// is not the overlay's to choose: Chrome's is 70 columns and ran off the
+	// panel onto the scene.
+	for _, gpu := range []string{
+		"ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+		strings.Repeat("x", 200),
+		strings.Repeat("x", 200) + " (masked)",
+	} {
+		line := "gpu " + gpuName(gpu)
+		if n := utf8.RuneCountInString(line); n > hudCols {
+			t.Errorf("gpu line %q is %d columns, over %d", line, n, hudCols)
+		}
+	}
+}
+
+func TestGPUName(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ in, want string }{
+		// Chrome on macOS, and the reason the function exists.
+		{"ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)", "Apple M4 Pro"},
+		// Chrome on Windows: the vendor and the backend go, and the name is
+		// cut to the row.
+		{"ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0, D3D11)", "NVIDIA GeForce RTX 3080 Direct3D1…"},
+		// Chrome on Linux.
+		{"ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL 4.6)", "Mesa Intel(R) UHD Graphics 620 (K…"},
+		// ANGLE with nothing to drop.
+		{"ANGLE (Apple M1)", "Apple M1"},
+		// A browser that masks the name: kept as it came, and the mask
+		// survives a cut, because it is why the name says so little.
+		{"Apple GPU (masked)", "Apple GPU (masked)"},
+		{strings.Repeat("x", 40) + " (masked)", strings.Repeat("x", 24) + "… (masked)"},
+		// What the host and a browser without WebGL say.
+		{"n/a — no browser", "n/a — no browser"},
+		{"n/a", "n/a"},
+	}
+	for _, c := range cases {
+		if got := gpuName(c.in); got != c.want {
+			t.Errorf("gpuName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestClipCountsRunes(t *testing.T) {
+	t.Parallel()
+	// The overlay's columns are runes, not bytes: an arrow is three bytes
+	// and one column, the way the menu's hint already learned.
+	cases := []struct {
+		in   string
+		cols int
+		want string
+	}{
+		{"←→↑↓", 4, "←→↑↓"},
+		{"←→↑↓", 3, "←→…"},
+		{"abcdef", 6, "abcdef"},
+		{"abcdef", 5, "abcd…"},
+		{"abcdef", 1, "…"},
+		{"abcdef", 0, ""},
+		{"", 3, ""},
+	}
+	for _, c := range cases {
+		if got := clip(c.in, c.cols); got != c.want {
+			t.Errorf("clip(%q, %d) = %q, want %q", c.in, c.cols, got, c.want)
 		}
 	}
 }

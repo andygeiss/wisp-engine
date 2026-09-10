@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // metricsWindow is how many frames the statistics remember: two seconds at 60
@@ -213,11 +214,143 @@ const (
 	hudPad   = 6.0
 	hudRowH  = 13.0
 	hudWidth = 268.0
+	// hudCols is how many characters of hudFont fit between the panel's
+	// padding, counted the way menuCols is: the headless twin cannot measure
+	// text, so a width a test can check has to be arithmetic. 268 - 2*6
+	// leaves 256 px, and at Menlo's 0.6023em — the widest advance
+	// ui-monospace resolves to — 11 px is 6.63 px a character, which is 38.
+	// A label and its value share a row from opposite ends and neither is
+	// clipped to the panel, so the two together have to fit, with a space
+	// between; TestMetricsTextFits holds every row to that.
+	hudCols = 38
 	// hudBars is how many bars the frame-time graph draws. One bar per frame
 	// would be 120 crossings into JavaScript every frame, for a graph nobody
 	// can read at that width anyway.
 	hudBars = 60
 )
+
+// The overlay's colours: the ground it sits on, the three a frame time can
+// be, and the two the text is.
+const (
+	hudGround = "rgba(0, 0, 0, 0.72)"
+	hudGood   = "rgba(120, 220, 140, 0.9)"
+	hudWarn   = "rgba(240, 200, 90, 0.9)"
+	hudBad    = "rgba(240, 110, 110, 0.9)"
+	hudDim    = "rgba(255, 255, 255, 0.55)"
+	hudPlain  = "white"
+)
+
+// hudRow is one line of the overlay: a label drawn from the left edge and a
+// value drawn from the right one.
+type hudRow struct {
+	label, value, color string
+}
+
+// metricsRows spells the overlay's rows from s. It is apart from the draw so
+// that a test can hold every row against hudCols: the two ends of a row are
+// drawn independently, and a pair too wide for the panel is not clipped to
+// it — the value is painted over the label. An array rather than a slice, so
+// the overlay allocates nothing for its own layout.
+func metricsRows(s Stats) [8]hudRow {
+	frameColor := hudGood
+	switch {
+	case s.Budget > 0 && s.P99Ms > s.Budget*2:
+		frameColor = hudBad
+	case s.Late > 0 && s.P99Ms > s.Late:
+		frameColor = hudWarn
+	}
+	return [8]hudRow{
+		{"fps", formatMillis(s.FPS), hudPlain},
+		{"frame  p50 / p99", formatMillis(s.P50Ms) + " / " + formatMillis(s.P99Ms) + " ms", frameColor},
+		{"update", formatMillis(s.UpdateMs) + " ms", hudPlain},
+		// Two numbers rather than one: a renderer swap moves the draw and
+		// leaves the sort exactly where it is, and that is the whole WebGL2
+		// question.
+		{"sort / draw", formatMillis(s.SortMs) + " / " + formatMillis(s.DrawMs) + " ms", hudPlain},
+		{"main thread", formatPercent(s.Load) + "  of " + formatMillis(s.Budget) + " ms", hudPlain},
+		{"entities / drawn", itoa(s.Entities) + " / " + itoa(s.Drawn), hudPlain},
+		{"go heap / wasm mem", formatBytes(s.GoHeapBytes) + " / " + formatBytes(s.WasmMemoryBytes), hudPlain},
+		// Said plainly rather than left out: no browser has an API for
+		// either, and a row that read 0 would be a lie. Twenty columns,
+		// because the label has fourteen and the row has thirty-eight.
+		{"cpu / gpu load", "n/a — no browser API", hudDim},
+	}
+}
+
+// gpuName is the graphics card the way one row has room to say it. Chrome
+// wraps what WEBGL_debug_renderer_info reports in ANGLE's own spelling —
+// "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+// 70 columns for the 12 that name the card — so the vendor in front, the
+// backend's version behind and the Metal backend's own prefix are dropped.
+// Whatever is left, and any name that is not ANGLE's, is cut to the row; a
+// browser's "(masked)" survives the cut, because it is the reason the name
+// says so little.
+func gpuName(s string) string {
+	const tag = " (masked)"
+	cols := hudCols - len("gpu ")
+	name, masked := strings.CutSuffix(s, tag)
+	if len(name) > 8 && name[:7] == "ANGLE (" && name[len(name)-1] == ')' {
+		inner := name[7 : len(name)-1]
+		if i := find(inner, ", "); i >= 0 {
+			inner = inner[i+2:] // the vendor: the card's name carries it anyway
+		}
+		if i := lastComma(inner); i >= 0 {
+			inner = inner[:i] // the backend and its version
+		}
+		if i := find(inner, "Renderer: "); i >= 0 {
+			inner = inner[i+len("Renderer: "):] // "ANGLE Metal Renderer: ", on macOS
+		}
+		name = inner
+	}
+	if masked {
+		return clip(name, cols-len(tag)) + tag
+	}
+	return clip(name, cols)
+}
+
+// find is where sub first starts in s, or -1. It and lastComma are loops
+// rather than strings.Index and strings.LastIndex because those carry a
+// search for long needles that a TinyGo build pays for in kilobytes.
+func find(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+// lastComma is where the last ", " in s starts, or -1; see find.
+func lastComma(s string) int {
+	for i := len(s) - 2; i >= 0; i-- {
+		if s[i] == ',' && s[i+1] == ' ' {
+			return i
+		}
+	}
+	return -1
+}
+
+// clip cuts s to at most cols columns and ends it with an ellipsis when it
+// had to, so a line never runs past the panel it is drawn in. A column is a
+// rune, the overlay's font being monospace, and "…" is one of them.
+func clip(s string, cols int) string {
+	if cols < 1 {
+		return ""
+	}
+	// One pass counts the runes and remembers where the last column that
+	// fits begins, so the cut needs no second walk and no utf8 import.
+	n, cut := 0, 0
+	for i := range s {
+		if n == cols-1 {
+			cut = i
+		}
+		n++
+	}
+	if n <= cols {
+		return s
+	}
+	return s[:cut] + "…"
+}
 
 // drawMetrics paints the overlay. It is drawn with the same two primitives as
 // everything else, so it is inside the canvas in fullscreen too.
@@ -225,53 +358,25 @@ func (e *Engine) drawMetrics() {
 	if !e.Debug.ShowMetrics {
 		return
 	}
-	const (
-		ground = "rgba(0, 0, 0, 0.72)"
-		good   = "rgba(120, 220, 140, 0.9)"
-		warn   = "rgba(240, 200, 90, 0.9)"
-		bad    = "rgba(240, 110, 110, 0.9)"
-		dim    = "rgba(255, 255, 255, 0.55)"
-		plain  = "white"
-	)
 	s := e.Stats()
-
-	rows := 8
-	h := float64(rows)*hudRowH + hudPad*3 + 26
-	e.Rect(0, 0, hudWidth, h, ground)
+	rows := metricsRows(s)
+	h := float64(len(rows))*hudRowH + hudPad*3 + 26
+	e.Rect(0, 0, hudWidth, h, hudGround)
 
 	y := hudPad + hudRowH/2
-	line := func(label, value, color string) {
-		e.Text(hudPad, y, label, dim, hudFont, "left")
-		e.Text(hudWidth-hudPad, y, value, color, hudFont, "right")
+	for i := range rows {
+		e.Text(hudPad, y, rows[i].label, hudDim, hudFont, "left")
+		e.Text(hudWidth-hudPad, y, rows[i].value, rows[i].color, hudFont, "right")
 		y += hudRowH
 	}
 
-	frameColor := good
-	switch {
-	case s.Budget > 0 && s.P99Ms > s.Budget*2:
-		frameColor = bad
-	case s.Late > 0 && s.P99Ms > s.Late:
-		frameColor = warn
-	}
-
-	line("fps", formatMillis(s.FPS), plain)
-	line("frame  p50 / p99", formatMillis(s.P50Ms)+" / "+formatMillis(s.P99Ms)+" ms", frameColor)
-	line("update", formatMillis(s.UpdateMs)+" ms", plain)
-	// Two numbers rather than one: a renderer swap moves the draw and leaves
-	// the sort exactly where it is, and that is the whole WebGL2 question.
-	line("sort / draw", formatMillis(s.SortMs)+" / "+formatMillis(s.DrawMs)+" ms", plain)
-	line("main thread", formatPercent(s.Load)+"  of "+formatMillis(s.Budget)+" ms", plain)
-	line("entities / drawn", itoa(s.Entities)+" / "+itoa(s.Drawn), plain)
-	line("go heap / wasm mem", formatBytes(s.GoHeapBytes)+" / "+formatBytes(s.WasmMemoryBytes), plain)
-	line("cpu / gpu load", "n/a — not exposed by browsers", dim)
-
 	y += hudPad / 2
-	e.Text(hudPad, y, "gpu "+s.GPU, dim, hudFont, "left")
+	e.Text(hudPad, y, "gpu "+gpuName(s.GPU), hudDim, hudFont, "left")
 	y += hudRowH
 
 	// The frame-time graph. Bars are merged by colour, so a steady scene costs
 	// three fills rather than sixty.
-	e.drawSparkline(hudPad, y, hudWidth-hudPad*2, 20, s.Budget, good, warn, bad)
+	e.drawSparkline(hudPad, y, hudWidth-hudPad*2, 20, s.Budget, hudGood, hudWarn, hudBad)
 }
 
 // drawSparkline paints the frame window as bars, newest on the right. A bar
