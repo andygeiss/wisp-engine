@@ -39,6 +39,10 @@ nobody changed it twice, and no number anywhere said what a change cost.
   fullscreen and needs no exception in the page's content security policy.
 - The waived baseline rules and the conformance notes live in the README,
   *Baseline deviations*. Nothing is waived unless it is written there.
+- The art is PixelLab's, named by ID in `assets/pixellab.txt`. `make art` is
+  the only way art enters the tree, what it writes is committed, and a
+  second run changes nothing. Nothing is fetched from PixelLab while a game
+  runs.
 - The package doc comment in [doc.go](doc.go) is the long form of *Job*. When it
   and this file disagree, this file wins.
 - Still v0. The API may break between minor tags, and the tag message says what
@@ -55,3 +59,6 @@ nobody changed it twice, and no number anywhere said what a change cost.
 - Two browsers on one machine play one world: each moves its own sprite and
   sees the other's, a strike lands only when the server says so, and `?solo`
   still ramps.
+- The lab is drawn from generated art: an eight-way hero that walks, idles
+  and strikes, a crowd that walks where it bounces, an autotiled floor and
+  props, and `make art` reproduces every file of it.

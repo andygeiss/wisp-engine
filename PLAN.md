@@ -4,11 +4,31 @@
 one machine play one world, which Andy confirmed in a browser on 2026-09-09;
 the numbers step 9 asked for were measured the same day and are written down
 under that milestone's *Verification*; and `v0.2.0` is the annotated tag on
-the commit that writes them. Two things are still open, and both are a
-person's to close: the blend verdict, which is the other half of step 0, and
-the ruling on the client half, which missed its size ceiling by a measured
-margin that is the brief's owner's to rule on.** This file is both the plan and the record — what was decided, what was
+the commit that writes them. The blend has since been measured in a real
+Chrome, frame by frame, and does what it claims — *The blend, measured* has
+the numbers — and the first look at the two overlays found two lines of text
+that did not fit, fixed the same day, and one question that is a person's:
+whether a floor tile's hit box belongs on the overlay. Still open, and still
+a person's: the eye's own verdict on the blend, the tile question, and the
+ruling on the client half, which missed its size ceiling by a measured margin
+that is the brief's owner's to rule on; *What is left*, near the end, lists
+every open item with who closes it.** This file is both the plan and the record — what was decided, what was
 built, what changed while building it, and what is left.
+
+**Milestone 8 is decided, and built.** PixelLab is the art source: a
+manifest of PixelLab IDs under `assets/`, one make target that turns it into
+the art the engine serves, an engine that faces eight ways, a floor that
+autotiles, and a lab drawn entirely from generated art — a ranger that
+walks, idles and strikes in eight directions, a crowd of foxes that walk
+where they bounce, a lake with a shore, a dirt path and four props, for 46
+generations. Every gate is green, the module is 278,777 bytes, a headless
+Chrome drew both scenes, and Andy played it on 2026-09-10 and said it
+works; `v0.3.0` is the annotated tag on the commit that records it. The
+analysis of 2026-09-10
+— a probe tileset, the measured export formats and the four decisions Andy
+took on them — is what it built on; *PixelLab — milestone 8* is the brief,
+the decisions and the record. The server that ships, which this file used to
+call milestone 8, is milestone 9 now and still waits for a brief of its own.
 
 **Milestone 7 is decided, and built.** The lab becomes the network client and the server
 that serves it runs the world: the game state lives on the server, the browser
@@ -31,21 +51,23 @@ checklist's first box is checked at last. *Migrating `game-jam-template`* is
 the record of what was not mechanical about it.
 
 **The lab has since been built and run.** TinyGo and `wasm-opt` are installed,
-`make wasm` produces a 267 KB module, every gate is green including the two
+`make wasm` produces a 268 KB module, every gate is green including the two
 that need the network, and the scene has rendered in a browser. That first run
 is what turned up the floor-layer bug in *Fixes on the first real run*.
 
-**The blend between two ticks has not been looked at, and it is the loose end
-everything after it leans on.** It is built, every gate is green, and
-`make wasm` has rebuilt the module with it — but the claim it makes is that the
-motion is visibly smoother, and that is a claim about `pass` in
-`runtime_js.go`, the one line it changed that no test reaches. Step 8 of
-*Verification* is the check, and it is step 0 of milestone 7: a network client
-draws nothing but that blend. It was meant to be looked at before anything
-was built on it, and it was not — there was no browser to look with — so the
-client was built on it unseen, and two tabs have since played over it without
-complaint. That is a sign, not the verdict; the verdict is still a walk across
-the floor with the knob on and off.
+**The blend between two ticks has now been measured, and it does what it
+claims.** It was the loose end everything after it leaned on: the claim is
+that the motion is visibly smoother, which is a claim about `pass` in
+`runtime_js.go`, the one line it changed that no test reaches, and there was
+no browser to look with, so the client was built on it unseen. On 2026-09-10
+a headless Chrome was driven over its debugging pipe instead: it holds the
+page at a steady 60 frames a second, holds a key down, and reads the canvas
+back every frame. With the knob on, the floor scrolls an even 2 px a frame
+behind a walking player; with it off, it moves 0, 0, 6 px at a 20 Hz tick and
+4, 0, 4, 0 at the server's 30 — the tick made visible, exactly as *The draw
+blends between two ticks* said it would be. *The blend, measured* has the
+table and how it was taken. What a machine cannot say is whether it *looks*
+right to a person, so step 8 of *Verification* keeps one line for Andy's eye.
 
 ## Context
 
@@ -89,7 +111,7 @@ open and press keys in.
   what a change cost. Both are why the game in the template still feels like its
   first draft.
 - **Guardrails:** Zero third-party dependencies. Everything compiles under
-  TinyGo 0.42; the module measures 267 KB against a 320,000-byte gate. All
+  TinyGo 0.42; the module measures 268 KB against a 320,000-byte gate. All
   overlay UI is drawn on the canvas, never as DOM, so it survives fullscreen.
   309 KB was the number to protect in `game-jam-template`, and it was not
   protected: importing the module took that game to 411 KB. See *Migrating
@@ -111,7 +133,8 @@ open and press keys in.
 | 4. The metrics overlay and the sprite spawner | **done** |
 | 5. Aseprite sheets | **done** — and Aseprite turned out to be installed after all |
 | 6. `game-jam-template` imports the module | **done** — and it cost the game 100 KB |
-| 7. The lab plays over the wire | **done** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers of step 9 measured with a bot the same day and written into its *Verification*; tagged `v0.2.0`. The blend verdict of step 0 is what is left, and it is a browser's; the brief, the decisions and the order are below |
+| 7. The lab plays over the wire | **done** — two tabs on one machine, confirmed in a browser on 2026-09-09; the numbers of step 9 measured with a bot the same day and written into its *Verification*; tagged `v0.2.0`. The blend of step 0 was measured in a headless Chrome on 2026-09-10 and holds; the brief, the decisions and the order are below |
+| 8. PixelLab is the art source | **done** — decided and built 2026-09-10, for 46 generations; every gate green, 278,777 bytes; drawn in a headless Chrome and played by Andy the same day; tagged `v0.3.0`. *PixelLab — milestone 8* is the brief, the decisions and the record |
 
 Three follow-ups, each gated on evidence rather than scheduled:
 
@@ -148,29 +171,47 @@ switching the knob on is looking for; a box of zero size is not, because it
 never collides. `TestShowHitBoxesDrawsWhereTheRulesAre` pins all of that, in
 `host_test.go` under the host build tag, because the js vet compiles the test
 files too and only the headless backend keeps the record. It cost 1,607
-bytes. What it has not had is a look in a browser, which is the same look the
-blend is waiting for.
+bytes. **It has had its look, on 2026-09-10 in a headless Chrome**, magnified
+five times: standing still, the box is centred on the sprite; walking with
+the blend on, it runs a few pixels ahead of the sprite, as the doc comment
+says; with the blend off the two coincide; and every bouncer's box sits on
+its bouncer, leading it a little the way it is moving. What the look also
+found is that a floor is 960 entities and every one of them has a 20x20 box:
+with the knob on, the lab's screen is 253 red squares in a grid and the
+player's is one more of them. That is what the doc comment promises — "every
+entity's hit box" — and `AddTilemap`'s tiles are entities with sprites, so
+`BoundingBox` and `HasCollision` are as true of a tile as of anything.
+Whether a debug overlay should still draw them is a design question and it
+is not settled here: skipping them needs a way to tell a tile from a still
+sprite, which the engine does not have — a marker bit would be the last
+spare, 15 — and a game that uses tiles as walls would want their boxes
+shown. *What is left* names it.
 
 ### Gates
 
 Green, all of them: `gofmt`, `go vet`, `GOOS=js GOARCH=wasm go vet`,
 `go fix -diff`, `staticcheck`, `govulncheck`, `go mod tidy -diff`,
 `go test -race -shuffle=on`, `CGO_ENABLED=0 go build`. `make ci` runs that same
-list against the commit and is green too. 130 test functions across six
-packages: 121 tests, five examples, and four fuzz targets with their seeds —
+list against the commit and is green too. 156 test functions across eight
+packages: 147 tests, 5 examples, and 4 fuzz targets with their seeds —
 `FuzzParseSheet`, `FuzzUnmarshalText`, `FuzzDecode` and `FuzzRead`.
 `FuzzParseSheet` has also been
 run for 45 seconds — 10.9 million executions, no crash and no sheet that
 violated an invariant the draw trusts.
 
-`make wasm` has run. `web/static/lab.wasm` is committed at 273,817 bytes — 267
-KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4. The
+`make wasm` has run. `web/static/lab.wasm` is committed at 278,777 bytes — 272
+KB, under the 320,000-byte gate — built with TinyGo 0.42.0 and LLVM 22.1.4.
+Milestone 8 put 4,346 on: 168 for the facing, and 4,178 for the lab's art —
+the direction table, the two sheets, the autotiler and the level, the
+bouncers turning their sprite, the strike's bit. The
 free list and the fixed tick cost 586 bytes of that between them, the sheet
 2,615 more, and the blend between two ticks 1,972; the three hooks of
 milestone 7 then took 36 off, because folding the movement into one function
 gave the compiler back more than the new branch cost, the hit-box overlay put
-1,607 on, moving the solo scene onto `internal/lab` 1,041 more, and the
-network client 31,736 — *The client is built* has that one piece by piece.
+1,607 on, moving the solo scene onto `internal/lab` 1,041 more, the
+network client 31,736 — *The client is built* has that one piece by piece —
+and the two overlay lines that did not fit 614, of which 395 is unwrapping
+the GPU's name.
 `ParseSheet` is not
 among those 2,615: the lab builds its sheet with `GridSheet`, so the scanner is
 dead code the linker drops.
@@ -192,7 +233,7 @@ where there is no fullscreen to ask for.
 | Engine state | An `*Engine` struct with `Settings` embedded. `e.X[i]` keeps the direct slice access; no getters. |
 | Repo shape | One repo: the engine at the module root, plus `cmd/lab`, `cmd/serve` and `web/`. The library rule against a `main` package is waived on the record; nothing is embedded, so that half needs no waiver. |
 | Renderer | Canvas2D now. The overlay produces the evidence for a WebGL2 batcher later. |
-| Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — not exposed by browsers`, never a made-up number. |
+| Metrics | Honest browser proxies only. CPU% and GPU% read `n/a — no browser API`, never a made-up number. |
 | Sheet parsing | A hand-written scanner, not `encoding/json`. See *Aseprite sheets*. |
 | Distribution | Public, and tagged. `game-jam-template` is a public repository, so a private module behind it would have been a template nobody but its author could build. `v0.1.0` is the first tag; its message lists the API it pins, because *Job* says the tag message is where a break is written down. `v0.2.0` is the second: it names the three hooks and the blend's API, and says what broke — the blend is on by default, so an entity moved from the per-frame update is drawn dragged back toward the tick until that movement moves into `Simulate`; bit 14 is `StateRemote` and no longer spare; and `Debug.ShowHitBoxes` draws now. |
 | Networking | A thin client. The server runs the world and the browser sends intent — no prediction, no lockstep. Three of the old brief's questions dissolve with it; see *Networking — milestone 7, done*. |
@@ -200,14 +241,19 @@ where there is no fullscreen to ask for.
 | Where the netcode lives | `internal/`, public the day a second consumer needs it. `cmd/serve` grows into the game server; there is no third `cmd/`. |
 | The lab's skills | `Q` strike, `E` spawn, `R` dash — the template's keys and cooldowns, so its migration maps one to one. |
 | Encoding on the client | Through each message's own `Append`, never through the `wire.Message` interface: the second concrete type to reach one interface call cost the module 11.6 KB of dispatch, measured. |
+| The art | PixelLab, from a manifest of IDs; the `.aseprite` sources and `make sheets` go. `make art` downloads by ID, no token, and is the only way art enters the tree. Andy, 2026-09-10. |
+| The art tool | `cmd/art`, a third `main`, host-only: it crops character sheets and writes what the engine reads. The no-`main` waiver widens to it. Andy, 2026-09-10. |
+| Facing | `Engine.Facing`, a field next to `RowMask`: 2 by default, which is today's behaviour, or 4 or 8. Andy, 2026-09-10. |
 
 ## What the repository holds
 
 ```
 wisp-engine/
-├── assets/                  the .aseprite sources; `make sheets` exports them
+├── assets/pixellab.txt      the art, by PixelLab ID: kind, ID and name, one a line
 ├── camera.go            144 follow, dead zone, look-ahead, bounds, shake
 ├── cmd/
+│   ├── art/main.go         403 the art tool: the manifest, the downloads, the sort, the crop
+│   ├── art/main_test.go    331 against a stand-in server: the files, a second run, a 423
 │   ├── lab/main.go         71 the entry point: the images, the rules, solo or the wire
 │   ├── lab/net.go         229 network mode: intents out, the replica in, the HUD
 │   ├── lab/socket.go       95 the one syscall/js file outside the engine
@@ -230,8 +276,13 @@ wisp-engine/
 ├── host_test.go          48 what the headless twin recorded, read back
 ├── input.go             133 key state, edge detection, the menu's lock
 ├── internal/
-│   ├── lab/lab.go         382 the rules both halves share: skills, bouncers, the floor
-│   ├── lab/lab_test.go    247 the cooldown gate, the strike, the cap, the dash, the bounce
+│   ├── lab/art.go         244 the images, the directions, the two sheets, the rows, the props
+│   ├── lab/art_test.go    143 the constants against the committed JSON and PNGs
+│   ├── lab/floor.go       120 the Wang table, the autotiler, the lake and the path
+│   ├── lab/lab.go         333 the rules both halves share: skills, the strike's bit, bouncers
+│   ├── lab/lab_test.go    471 the cooldown gate, the strike and its swing, the cap, the dash, the bounce, the floor
+│   ├── pixellab/pixellab.go 302 the layout and the metadata as Go, the Wang table, the row order, the crop
+│   ├── pixellab/pixellab_test.go 232 on real exports: the mage's sheet and the probe's metadata
 │   ├── replica/replica.go 218 the server's world in an engine: slots, queue, the depth rule
 │   ├── replica/replica_test.go 289 apply, hold, fast-forward, catch-up, order, the blend's pair
 │   ├── wire/wire.go       440 the ten messages and their bytes
@@ -239,12 +290,12 @@ wisp-engine/
 │   ├── ws/frame_test.go    64 the RFC's key, and the fuzz target over the reader
 │   ├── ws/ws.go           511 RFC 6455: Accept, Dial, frames, close, ping
 │   └── ws/ws_test.go      521 every rule the brief lists, over net.Pipe
-├── internal_test.go     693 draw order, layering, frame mapping, source rects
+├── internal_test.go     780 draw order, layering, frame mapping, source rects, the two overlays' text
 ├── knobs.go             323 the knob table, GoLiteral, the text format
 ├── LICENSE                  MIT
 ├── Makefile                 baseline Makefile + sheets and wasm targets
 ├── menu.go              358 the M overlay, canvas-drawn
-├── metrics.go           344 the frame ring, percentiles, the H overlay
+├── metrics.go           449 the frame ring, percentiles, the H overlay
 ├── PLAN.md                  this file
 ├── random.go              8 the engine's one source of randomness
 ├── README.md                install, the 30-second example, waived rules
@@ -257,14 +308,15 @@ wisp-engine/
 ├── sheet_test.go        501 the export, the grid equivalence, the fuzz target
 ├── SPEC.md                  job, why, guardrails, done means
 ├── state.go             226 the state bits, movement, animation, draw order
+├── testdata/aseprite/       the old Aseprite export, as the parser's fixture
 ├── web/
-│   ├── static/              app.css, wasm_app.js, the art, lab.wasm, lab.json
+│   ├── static/              app.css, wasm_app.js, lab.wasm, and img/: what make art wrote
 │   └── templates/index.html the host page
 └── wisp_test.go        1458 the consumer's view: entities, camera, input, menu
 ```
 
-3,792 lines of engine that build anywhere, 491 behind the browser tag and
-3,019 of tests; 1,542 of lab and server with 857 of tests; 1,551 under
+3,897 lines of engine that build anywhere, 491 behind the browser tag and
+3,106 of tests; 1,542 of lab and server with 857 of tests; 1,551 under
 `internal/` with 1,318 of tests. The counts in that listing are hand-written and
 have now been wrong four times — most recently `doc.go`, which grew eight lines
 with the blend and kept its old number. `wc -l *.go cmd/*/main.go` is how they
@@ -534,15 +586,71 @@ first, which is where the fixed tick wanted it anyway. Its hero already
 benefits either way, because the engine's own move bits have run on the tick
 since the tick existed.
 
-**Nobody has looked at it yet.** Everything above is an argument about
-arithmetic, and the tests hold that half of it: four of them fail if the blend
-is stubbed out, three more if `set` or `Place` stops writing the previous
+**Nobody had looked at it until 2026-09-10.** Everything above is an argument
+about arithmetic, and the tests hold that half of it: four of them fail if the
+blend is stubbed out, three more if `set` or `Place` stops writing the previous
 position, and both were run against a broken build rather than assumed. But
 "the motion is visibly smoother" is not something a test can say, and the only
 line changed in the draw is one that only the js build ever runs — which is the
 same shape as milestone 5's switch to a sheet, where every argument was about
 `srcRect` and the browser was what checked it. Step 8 of *Verification* is that
-check for this one, and it has not been done.
+check for this one, and the next section is how it was done with nobody at the
+keyboard.
+
+### The blend, measured
+
+Smoother is a claim about how far the picture moves from one frame to the
+next, and a browser can be asked that. A headless Chrome 152 was started with
+`--remote-debugging-pipe` and driven over DevTools from a script in the
+session's scratch directory — Python's standard library, no module — because
+the Chrome extension was not connected, for the third session running, and
+Chrome's `--screenshot` flag catches one frame and leaves. Driven this way the
+page runs for real: `requestAnimationFrame` came every 16.7 ms, never under
+16.5 or over 16.8, on the machine's own GPU, and a `KeyboardEvent` dispatched
+on `window` without its `keyup` is a key held down, which is what walking
+needs. The knobs were seeded through `localStorage` before the module loaded,
+in the menu's own `Group.Field=value` lines, so no menu had to be steered.
+
+The sampler is thirty lines of JavaScript run inside the page: every
+animation frame it reads a band of the canvas back with `getImageData`,
+compares it with the previous frame's, and records two numbers — how much the
+picture changed at all, and the sideways shift that best explains the floor.
+The floor is what moves when the player walks, because the camera snaps to
+the player's *drawn* position and so the player stays put on screen; the
+bouncers are what move when the player stands still. Those are the two routes
+the check asked for — the engine's own move bits and `Simulate` — one seen
+through the camera and one directly. Three seconds each, 180 frames, `?solo`
+at `Time.TickRate` 20 and the wire at the server's 30, the blend on and off:
+
+| | blend on | blend off |
+|---|---|---|
+| `?solo`, tick 20, walking: the floor's shift per frame | 2 px on every frame and 3 on about one in ten, never 0 — 2.08 on average, which is 6.25 px a tick spread over three frames | 0, 0, 6, then 0, 0, 7: 71 of 107 frames moved nothing and the rest moved 6 or 7 px |
+| `?solo`, tick 20, 100 bouncers, standing still: frames on which the picture did not change | 0 of 180 | 96 of 180, in runs of two |
+| the wire, tick 30, walking: the floor's shift per frame | 2 px on every frame and 3 on about one in nine — 2.08 on average, which is 4.17 px a tick over two frames | 4, 0, 4, 0, then a 5: 52 of 105 frames moved nothing |
+| the wire, tick 30, the server's crowd of 100, standing still: frames on which the picture did not change | 0 of 180 | 79 of 180, every other frame |
+
+Both walks ran into the world's edge after about 107 frames, where the camera
+stops and every later frame moves nothing; the counts above are the frames
+before it. The wire's walk with the blend on held once, for two frames, right
+after its first snapshot — the jitter buffer's "an empty queue holds for a
+tick", seen at the join and never again, and the HUD's `held` read 1 at the
+end. The frames on which the picture did not change with the blend off are
+the tick made visible: at 20 ticks on a 60 Hz display two frames in three
+draw the same picture and the third jumps a whole tick, at 30 every other one
+does, and with the blend on there is no such frame. Only the animation's own
+frame changes, every 100 ms, show through either way, which is presentation
+and runs per frame by design.
+
+That is the verdict the arithmetic promised, taken from the committed module
+in a real Chrome, and it is what a network client draws. What it is not is
+an eye: whether 2 px a frame at 60 Hz *reads* as smooth on a display in
+front of a person is Andy's to say, and step 8 keeps that line. The driver
+was not kept — a Python script has no place in this tree — and the recipe is
+here so it can be written again in an hour: the pipe, the attached target,
+`Page.addScriptToEvaluateOnNewDocument` for the knobs, a synthetic key, a
+`requestAnimationFrame` loop over `getImageData`, and `Page.captureScreenshot`
+with a `clip` and a `scale` for a magnified look, which is how the hit-box
+overlay and the metrics panel got theirs.
 
 ## `Settings` — the point of the project
 
@@ -661,9 +769,9 @@ access, so a shipped build always starts on its compiled-in settings.
 
 **Say plainly what a browser will not tell you.** There is no CPU-utilization API
 and no GPU-utilization API in any browser; the WebGL timer-query extension that
-would give GPU frame time is switched off in Chrome for almost everyone. Those
-two rows read `n/a — not exposed by browsers`, and a test asserts they never
-arrive as a plausible zero.
+would give GPU frame time is switched off in Chrome for almost everyone. That
+row reads `n/a — no browser API`, and `TestMetricsTextFits` pins it to the
+width of the row it shares with its label.
 
 | Row | Where it comes from |
 |---|---|
@@ -673,10 +781,10 @@ arrive as a plausible zero.
 | entities / drawn | drawn is after the camera threw the off-screen ones away |
 | go heap | `runtime.ReadMemStats`, sampled **once a second**: under TinyGo's conservative collector this walks the heap and would show up in the frame time it is meant to explain |
 | wasm mem | the loader publishes `instance.exports.memory`; Go reads `.buffer.byteLength` fresh each time, because growing the memory detaches the old buffer |
-| js heap | `performance.memory.usedJSHeapSize` — Chromium only, `n/a` elsewhere |
+| js heap | `performance.memory.usedJSHeapSize` — Chromium only, 0 elsewhere. In `Stats`; the panel does not draw it |
 | gpu | `WEBGL_debug_renderer_info` on a throwaway context that is then released; prints `(masked)` when the browser masks it |
-| long frames | `PerformanceObserver` on `long-animation-frame`, falling back to `longtask` — Chromium only, `-1` elsewhere |
-| cpu / gpu load | `n/a — not exposed by browsers` |
+| long frames | `PerformanceObserver` on `long-animation-frame`, falling back to `longtask` — Chromium only, `-1` elsewhere. In `Stats`; the panel does not draw it |
+| cpu / gpu load | `n/a — no browser API`, one row for both because the answer is the same |
 
 Below the rows, a 60-bar frame-time graph: amber past the budget, red past twice
 it. One fill per bar — merging runs of one colour would be fewer calls into the
@@ -697,6 +805,35 @@ apply. The collector on this target is the *precise* one and not the
 conservative one this file and `metrics.go` both used to name; the reason for
 sampling once a second survives the correction, because `ReadMemStats` walks
 the block metadata either way.
+
+**Two lines did not fit, found on the first magnified look, 2026-09-10.** A
+row's label is drawn from the panel's left edge and its value from its right,
+and neither is clipped to the panel, so a pair wider than the row is not cut
+short — the value is painted over the label. `cpu / gpu load` read
+`cpu / gpu n/ad— not exposed by browsers`: the value was 29 columns and the
+label 14, on a row that has 38 by the menu's own arithmetic — 268 px less
+twice the 6 px padding, at Menlo's 0.6023em advance for 11 px, which is 6.63
+px a column. And the GPU line ran off the panel onto the scene, because Chrome
+reports the card as `ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro,
+Unspecified Version)`, 70 columns for the 12 that name it. The value is
+`n/a — no browser API` now, 20 columns; `gpuName` drops ANGLE's vendor, its
+backend's version and the Metal backend's own prefix, keeps a browser's
+`(masked)` through any cut, and `clip` cuts what is left to the row with an
+ellipsis, counting runes rather than bytes the way the menu's hint learned
+to. `hudCols` states the budget with its arithmetic, `metricsRows` lays the
+rows out apart from the draw so a test can hold them, and
+`TestMetricsTextFits` holds every row at its widest — 999.9 ms everywhere,
+99,999 entities, a heap of 1023.9 K — to the budget with a space between
+label and value, and the GPU line under a 200-column name; `TestGPUName`
+pins Chrome's spelling on macOS, Windows and Linux. It cost 614 bytes, 395
+of them the unwrapping. Written with `strings.CutPrefix`, `TrimSuffix` and
+`Cut` it cost 2,011, and with `strings.LastIndex` and
+`utf8.RuneCountInString` as well 2,218: each brings code a TinyGo build pays
+for, so the prefix is compared by hand and the two searches are loops of
+their own. The `js heap` and `long frames` rows in the table above are in
+`Stats` and not on the panel, which draws eight rows and the graph; the
+panel with the fix in is the look in a browser that step 4 of *Verification*
+asks for, in Chrome.
 
 ## The lab — `cmd/lab`
 
@@ -917,8 +1054,8 @@ its frames really are a grid. A game with a packed or per-frame-timed sheet
 parses the export; the engine cannot tell the two apart, and that is the point.
 
 The consequence to be honest about: **`ParseSheet` is dead code in
-`lab.wasm`**, dropped by the linker, so the module's 273,817 bytes do not price
-the scanner. A game that parses an export pays for it, and the 46,183 bytes of
+`lab.wasm`**, dropped by the linker, so the module's 274,431 bytes do not price
+the scanner. A game that parses an export pays for it, and the 45,569 bytes of
 headroom are where it comes from.
 
 ### Still open
@@ -993,7 +1130,7 @@ digest-based cache busting stamped into the page and every asset URL, `/static/`
 answering 404, traversal refused, and both missing browser artefacts named at
 boot with the command to run.
 
-**With TinyGo installed — `make wasm`.** Done: 273,817 bytes, against a 320,000
+**With TinyGo installed — `make wasm`.** Done: 274,431 bytes, against a 320,000
 gate that now actually runs, so the size claim cannot rot. This line has been
 wrong twice — it still said 234,296 after two commits had moved the number — so
 read it against *Gates*, which is updated with the build rather than by hand.
@@ -1011,7 +1148,10 @@ functions survived the linker — that pair is what priced the template's 100 KB
 3. Reload. The tuning is still there.
 4. `H` — the overlay. `cpu / gpu load` must read `n/a`, not a number. Check
    Safari and Firefox too: what is being verified there is that the GPU name
-   prints `(masked)` and the JS heap prints `n/a`.
+   prints `(masked)`. Done in Chrome on 2026-09-10, magnified, and it read
+   `n/a` — painted over its own label, because the value was 29 columns and
+   the row has 38; *The metrics overlay* has the fix and the look after it.
+   Safari and Firefox are still to look at.
 5. Press `]` five times, then `0`. `go heap` should step up and **not** fall,
    because the entity slices keep their capacity. If it is a constant,
    `ReadMemStats` is not filling `HeapAlloc` under TinyGo — delete the row rather
@@ -1022,13 +1162,18 @@ functions survived the linker — that pair is what priced the template's 100 KB
    reach. Still to read at the ceiling: the *sort / draw* row.
 7. `F` — fullscreen. The overlay and the menu are still there, because they are
    drawn inside the canvas. Anything that disappears was in the DOM.
-8. **Not yet done.** Walk the player across the floor, then turn
-   `Render.Interpolate` off in the menu and walk back. The motion has to be
-   visibly smoother with it on — that is the whole claim of *The draw blends
-   between two ticks*, and no test can make it. Nudge `Time.TickRate` down to
-   20 to see the difference the way a slow display would, and watch a spawned
-   sprite as well as the player: the two reach the draw by different routes,
-   one through `Simulate` and one through the engine's own move bits.
+8. **Measured on 2026-09-10; the eye's half is still open.** Walk the player
+   across the floor, then turn `Render.Interpolate` off in the menu and walk
+   back. The motion has to be visibly smoother with it on — that is the whole
+   claim of *The draw blends between two ticks*, and no test can make it.
+   Nudge `Time.TickRate` down to 20 to see the difference the way a slow
+   display would, and watch a spawned sprite as well as the player: the two
+   reach the draw by different routes, one through `Simulate` and one through
+   the engine's own move bits. A headless Chrome has done all of that with
+   the canvas read back every frame — *The blend, measured* has the numbers:
+   an even 2 px a frame with the knob on, 0, 0, 6 with it off, on both routes
+   and on the wire too. What is left of this step is a person's look at the
+   same walk.
 
 ## Migrating `game-jam-template` — milestone 6, done
 
@@ -1165,7 +1310,15 @@ what each one cost.
     after `wasm-opt`, and *The client is built* says what each part costs and
     what the probe did not count. The module is 46 KB under the gate. Whether
     the ceiling moves or the client shrinks is the brief's owner's call, and
-    this file does not make it.
+    this file does not make it. What the pricing recommends, on the record:
+    retire the per-half ceiling rather than shrink the client. The probe
+    priced the socket alone, and the socket came in at 7.8 KB against its
+    6.6, so the ceiling was never a number about a client that decodes ten
+    messages, keeps a world and prints what the wire costs; the pieces that
+    could go are the ones the lab exists to have, and the two that were
+    tried saved a kilobyte between them. The module's 320,000-byte gate is
+    the claim `make wasm` checks, and it is 45,569 bytes under it. The
+    ruling is still Andy's.
   - The server never compiles under TinyGo and never imports the renderer.
   - The client is not trusted. It sends intent — an axis and a skill press —
     and nothing else. Positions, state bits, cooldowns and who hit whom are the
@@ -1175,7 +1328,7 @@ what each one cost.
     and it is re-measured before this file quotes a new ceiling.
   - `game-jam-template` is not touched.
   - Deployment is not this milestone. Two browsers on one machine is the whole
-    claim; the server that ships is milestone 8, with a brief of its own.
+    claim; the server that ships is milestone 9, with a brief of its own.
 - **Done means:**
   - Two browsers on one machine play one world: each moves its own sprite and
     sees the other's, `Q` removes a bouncer only when the server says the hit
@@ -1227,7 +1380,7 @@ three things. Probed with the installed TinyGo 0.42.0, `-opt=z` then
 The engine's own numbers for scale, as they stood when this was written:
 `web/static/lab.wasm` was 242,081 bytes against a 320,000 gate, so 77,919
 bytes of headroom, of which the client half was to want about 12%. It took
-41%: the module is 273,817 bytes now, 46,183 under the gate. That headroom is
+41%: the module is 274,431 bytes now, 45,569 under the gate. That headroom is
 the lab's. A game carries its own code as
 well — `game-jam-template` is at 411 KB with no gate of this module's to sit
 under — so the 10 KB ceiling is a promise about the engine's half and not
@@ -1686,7 +1839,13 @@ a screenshot flag cannot do is hold a page in real time for a few seconds or
 press a key, so the frames it caught show the floor and "Click to start" —
 and, in `?solo`, the player at the centre of the view — and nothing of the
 HUD or the moving world. Two tabs with a person at the keyboard are step 9,
-exactly as planned.
+exactly as planned. A day later the same Chrome, driven over its debugging
+pipe rather than by a flag, did hold the page, walk the player and show the
+HUD — *The blend, measured* says how — and the HUD's own numbers agree with
+the bot's table below: a 1,926-byte snapshot with one player and the crowd
+of 100, which is the bot's 1,945 less one actor, 56.8 KB/s in, and a round
+trip of 5.6 to 6.1 ms from a browser's event loop against the bot's 0.2 from
+a goroutine.
 
 ### Security headers
 
@@ -1730,10 +1889,13 @@ Each step is green on its own and is its own commit.
 
 0. **Close the two loose ends the client leans on.** Step 8 of *Verification*
    — walk the floor with `Render.Interpolate` on and off and write the verdict
-   down, because a network client draws nothing but that blend — **still
-   open, and a browser's to close**. And `Debug.ShowHitBoxes`: a few lines in
-   `pass` against `BoundingBox`, or the knob goes — **done**, the few lines,
-   at 1,607 bytes; *Where it stands* has the shape.
+   down, because a network client draws nothing but that blend — **measured,
+   on 2026-09-10**: a headless Chrome walked the floor with the canvas read
+   back every frame, in `?solo` and on the wire, and *The blend, measured* is
+   the verdict; the eye's own look is the one line still open. And
+   `Debug.ShowHitBoxes`: a few lines in `pass` against `BoundingBox`, or the
+   knob goes — **done**, the few lines, at 1,607 bytes, and looked at the
+   same day; *Where it stands* has the shape and what the look found.
 1. **The three hooks**, with their tests, and the byte delta from `make wasm`
    — **done**; the delta is 36 bytes down.
 2. **`internal/wire`**: the round-trip tests and the fuzz target — **done**.
@@ -1845,6 +2007,313 @@ effect of this work:
 6. The background-work shape is written in `errgroup`, which is a dependency a
    zero-dependency module cannot take.
 
+## PixelLab — milestone 8
+
+The art comes from PixelLab now. Every sprite in the lab was
+`game-jam-template`'s four-row sheet and every floor tile was one tile
+repeated, because drawing was the slowest step — and the engine's two-way
+facing hid that a top-down game faces eight ways. PixelLab's MCP generates a
+character with eight rotations in minutes, any animation of it for one
+generation a direction, a Wang tileset in two minutes and a prop in one, and
+the account has 2,000 generations a month. The analysis of 2026-09-10 read
+the docs, the OpenAPI spec and the server's own engine guides, then measured
+what the docs left out on one probe tileset and the mage that was already on
+the account; Andy took four decisions on it the same day, and this section is
+the brief, the decisions, the shape and the record.
+
+### The brief
+
+- **Job:** A solo developer describes a character, a terrain or a prop in
+  words, and a few minutes later the lab draws it: eight-way, autotiled, at
+  the right size, from a manifest of PixelLab IDs that one make target turns
+  into the art the engine serves.
+- **Why:** Drawing was the slowest step, so the lab never had art of its own
+  and the engine never had to face north. PixelLab removes the drawing, but
+  the engine cannot yet turn eight ways, cannot tile a shoreline, and trusts
+  a padded cell for its hit box and its draw order — so generated art would
+  sort late and collide on air until those three are fixed.
+- **Guardrails:**
+  - Zero third-party dependencies, still. The art tool is standard library:
+    `net/http`, `archive/zip`, `image/png`, `encoding/json`. It never compiles
+    for the browser, so it may use all of them. `go list -deps .` on the root
+    package stays the standard library.
+  - Everything the browser runs still compiles under TinyGo, the module stays
+    under the 320,000-byte gate, and every engine change writes its byte
+    delta into *Gates*.
+  - The engine's exported API grows by `Engine.Facing` and a wider
+    `MaskPose`, and nothing else. The autotiler and the direction table live
+    in `internal/lab` until a second consumer wants them.
+  - Art is downloaded at build time into `web/static/img` and served from
+    there. Nothing is fetched from PixelLab while a game runs, and the
+    content security policy does not change.
+  - `make art` needs no token: the download URLs are keyed by the asset's
+    UUID. The secret in `.env` stays what it is, the MCP's.
+  - The generation budget for the lab is about fifty; `get_balance` is read
+    before each spend, and every spend is written down here with its cost.
+  - `game-jam-template` is not touched. At the default facing the engine
+    behaves exactly as before, and a test pins that.
+  - Aseprite's export stays a supported input to `ParseSheet`. What goes is
+    the lab's use of it, not the feature.
+- **Done means:**
+  - `make art` turns the manifest into the committed art with no token, and
+    running it a second time changes nothing.
+  - The lab's hero faces eight ways and walks, idles and strikes with
+    PixelLab animations; the floor is an autotiled meadow with a lake and a
+    dirt path from two chained tilesets; the bouncers and the props are
+    PixelLab art.
+  - A host test checks the lab's sheet constants against the committed
+    layout JSON, and another checks its Wang table against the committed
+    tileset metadata — the pattern of the grid-equals-export test.
+  - `Engine.Facing` is 2, 4 or 8; at 2 every existing key in a `RowForState`
+    map resolves as it did, and a test says so.
+  - `make check`, `make ci` and `make wasm` are green, the module is under
+    the gate, and the deltas are in *Gates*.
+  - Two tabs still play one world, eight-way on both halves.
+  - The README documents the pipeline and widens the waiver; `SPEC.md` names
+    the art source.
+
+### What the probe measured
+
+Everything below was taken from the account rather than read, on
+2026-09-10. The docs describe the formats; they do not draw them.
+
+**The character spritesheet export** — `/mcp/characters/{id}/spritesheet`,
+no token — is one uniform-grid PNG and a layout JSON, and it is exactly the
+engine's grid convention with names attached. Every cell is the size of the
+largest frame; frames are centred and never rescaled; there are no
+durations. Row 0 is the eight rotations in the order south, south-east,
+east, north-east, north, north-west, west, south-west; every animation and
+direction pair is a row of its own, frames left to right, and a row shorter
+than the widest is padded with transparent cells. The JSON carries
+`cell_size`, `sheet_size`, `columns` and a `rows` list of `type`, `animation`,
+`direction` and `frame_count`; `export_version` is 1.0 and the export is two
+weeks old, which is why a test pins it.
+
+**The cell is padded, and the engine trusts the rectangle.** The mage's
+figure measured against its cell:
+
+| Cell | Opaque union over every cell | Feet above the cell bottom |
+|---|---|---|
+| 40 x 40 | 20 x 24 | 9 to 11 px |
+
+`BoundingBox` is the cell minus a margin and the painter's sort uses the
+cell's bottom edge, so a 48 px hero over 32 px tiles would sort late and
+collide on air. Cropping every cell by the same union rectangle keeps the
+pivot consistent across frames and makes the rectangle the figure; that is
+what `cmd/art` is for.
+
+**The tileset export** — `/mcp/tilesets/{id}/image` and `/metadata`, no
+token — is a 4x4 sheet of 16 tiles and a JSON with, per tile, four corners
+as `lower` or `upper`, a `bounding_box` on the sheet, and a `pattern_4x4`.
+The sheet is not in Wang-index order, and the docs say to trust only the
+boxes; the probe's order, row-major, with the index NW*8 + NE*4 + SW*2 + SE:
+
+```
+13 10  4 12
+ 6  8  0  1
+11  3  2  5
+15 14  9  7
+```
+
+Whether that order is the same for every tileset is not known, which is why
+the table is derived from the metadata by a test rather than assumed by
+the code. A 12x8 test map rendered from that index off the probe sheet was
+seamless at every cell, including a one-cell inlet. The probe cost 4
+generations, as the tool warned it would, and took about two minutes.
+
+**What PixelLab does not give a top-down engine**: maps. Map Workshop
+exports a flat PNG and nothing else, so a level stays a vertex grid in
+code. Its projects, sandboxes and deploys are a Phaser-on-Cloudflare
+product, and its sidescroller, isometric, portrait and voice tools are for
+other genres.
+
+### Decisions
+
+| Question | Answer |
+|---|---|
+| The source of the art | PixelLab IDs, in `assets/pixellab.txt`; the `.aseprite` sources and `make sheets` go. Andy, 2026-09-10. |
+| Where the host tool lives | `cmd/art`, a third `main`; the no-`main` waiver widens to it, scoped to a build-time tool the library never imports. Andy, 2026-09-10. |
+| The hero | New, in v3 mode at 48 px, and the generations are spent. Andy, 2026-09-10. |
+| Where the facing count lives | `Engine.Facing`, a field next to `RowMask`; 0 or 2 is today's behaviour. Andy, 2026-09-10. |
+| The tileset sheet | Committed as served, byte for byte. The Wang table is hand-written in `internal/lab`, and a host test derives it from the committed metadata and compares. |
+| The character sheet | Cropped by `cmd/art` to the opaque union over every cell, one rectangle for the whole sheet, and the layout JSON rewritten to describe the cropped file with the crop recorded in it. |
+| The sheet's tags | Hand-written from a fixed row order — rotations first, then each animation in the manifest's order, eight directions each — and checked against the committed JSON by a host test. |
+| `MaskPose` | Grows to six bits: the four facings, idle and moving. At Facing 2 the vertical bits are never set, so every existing key is unchanged. |
+| Facing 4 on a diagonal | Keep the facing if it is one of the two axes pressed; otherwise the horizontal one. |
+| The Aseprite export | Stays a supported input. The committed export moves to `testdata/` as the parser's fixture, so the tests keep reading a real one. |
+| Maps | A vertex grid in `internal/lab`, built by the client the way the floor is today. The server still has no floor. |
+| The bouncers | A quadruped character, walking in eight directions, its row picked from its velocity at every bounce — on the server, so the row crosses the wire the way it already does. |
+| Props | `create_map_object`, one generation each, cropped by `cmd/art` like a sheet, placed by the client on the actors' layer. They collide with nothing, so the server never has them. |
+| The rows' order | `cmd/art` sorts a sheet's rows — the rotations, then every animation by name, its directions in PixelLab's order — because PixelLab's own order follows its animation IDs. Settled while building; *The record* says why. |
+| The export date | Dropped from the layout `cmd/art` writes: it is when the file was downloaded, not what it is, and it was the one thing that made a second run differ. Settled while building. |
+
+### Shape
+
+```
+wisp-engine/
+├── assets/pixellab.txt      the manifest: kind, ID, name, one asset a line
+├── cmd/art/                 the tool: read the manifest, download, crop, write
+├── internal/pixellab/       the two JSON shapes, the Wang table, the crop rectangle; host and tests only
+├── internal/lab/            the eight rows, the directions, the level, the autotiler, the bouncers' rows
+├── testdata/aseprite/       the old export, as the parser's fixture
+└── web/static/img/          what make art writes: hero, fox, props, two tilesets
+```
+
+### The order it is built in
+
+Each step is green on its own.
+
+0. **The brief and this record** — done.
+1. **Facing**: `Engine.Facing`, the wider `MaskPose`, `Move` at 2, 4 and 8;
+   the tests; the byte delta — **done**, 168 bytes, 274,431 to 274,599.
+2. **`internal/pixellab`**: the layout and the metadata as Go types, the
+   Wang table, the crop rectangle; tests on fixtures — **done**, and the
+   row order joined it, for the reason *The record* gives.
+3. **`cmd/art` and `make art`**: the manifest, the downloads, the crop, the
+   files; the waiver widened — **done**.
+4. **The generation**: the hero and its three animations, the fox and its
+   walk, four props, the second tileset chained on the first's grass; every
+   ID into the manifest, every cost into this file — **done**, 46
+   generations in all; the table is in *The record*.
+5. **`internal/lab`**: the directions, the rows, the level, the autotiler,
+   the bouncers' rows; tests — **done**.
+6. **`cmd/lab`**: the images, the floor, the props — **done**.
+7. **The old art out**: `assets/*.aseprite`, `make sheets`, `lab.png`,
+   `tiles.png`; the export into `testdata/` — **done**.
+8. **README, SPEC, the gates, `make wasm`, two tabs** — the first four
+   done and green at 278,777 bytes; the two tabs are Andy's, and a headless
+   Chrome has drawn both scenes in their place.
+
+### The record
+
+What each step found that the brief did not know.
+
+**The facing cost 168 bytes**, and no existing test moved: at the default
+the vertical bits are never set, so every key a two-row game ever built
+resolves as it did, and `TestFacing` holds that beside the four- and
+eight-way rules.
+
+**The export's row order is no order.** The first full sheet of the ranger
+came back with the strike first, the idle second and the walk last — the
+order of the three animations' group IDs, which is the order a database
+handed them back in. A regenerated walk would have moved every row under it
+and every constant naming a row with it. So `cmd/art` sorts: the rotations
+first, then every animation by name, its directions in the order the
+rotations row lists them, and the layout JSON is rewritten to say so. That
+is why each sheet has its own animation indices in `internal/lab` — the
+fox's walk is its first animation and the ranger's its third — and why the
+test against the committed JSON is the thing that would catch PixelLab
+changing its mind again.
+
+**A cell grows with its widest animation.** The ranger was 48 by 48 with
+its rotations, and 68 by 68 once the strike's swing was on the sheet;
+cropped, it is 52 by 48. The fox asked for at 32 came back on a 48 canvas,
+because standard mode widens the canvas around the figure, and cropped to
+44 by 34. Both are in `art.go` and both are checked against the files.
+
+**The export date was the one thing that made a second run differ.** Every
+layout download is stamped with the moment it was made, and the tool kept
+it as it keeps everything PixelLab wrote, so two runs disagreed about one
+line. It is dropped now, the stand-in server in the tool's tests stamps
+every download differently, and the test that runs the tool twice is what
+holds it. The path tileset's two files also changed once, between a fetch
+right after generation and one an hour later, and not again; the one
+comparison that mattered — two runs, `git status` clean after the second —
+holds, and is in *Verification*.
+
+**The generation**, all on 2026-09-10, on the account's Tier 1 plan:
+
+| Asset | Tool and mode | Generations | Time |
+|---|---|---|---|
+| the probe tileset, water to grass, 32 px | `create_topdown_tileset`, standard | 4 | about two minutes |
+| the ranger, 48 px | `create_character`, v3 | 2 | about four minutes |
+| the ranger's walk, eight directions | `animate_character`, template `walking-8-frames` | 8 | about three minutes |
+| the ranger's strike, eight directions, eight frames | `animate_character`, v3, from a sentence | 8 | about three minutes |
+| the ranger's idle, eight directions, four frames | `animate_character`, template `breathing-idle` | 8 | about three minutes |
+| the fox, a quadruped on the dog template | `create_character`, standard | 1 | about four minutes |
+| the fox's walk, eight directions | `animate_character`, template `walk-8-frames` | 8 | about three minutes |
+| the path tileset, grass to dirt, chained on the meadow's grass | `create_topdown_tileset`, standard | 3 | about two minutes |
+| a tree, a boulder, a bush, a stump | `create_map_object` | 4 | under two minutes |
+| | | **46** | |
+
+The plan caps eight jobs at once, so an eight-direction animation is one
+batch and the three of the ranger's ran one after another; that, not the
+generation itself, is what set the pace.
+
+**The look, in a headless Chrome, 2026-09-10.** Driven over its debugging
+pipe the way *The blend, measured* was — a click to start, a key held, a
+capture of the canvas at twice its size — both scenes drew: the lake with
+its shore on every edge and in a one-cell inlet, the path's grass matching
+the meadow's, the props standing on the actors' layer, the ranger facing
+east while walking east and north-west while walking that way, mid-swing on
+`Q` with the sword out, and a hundred foxes walking the way they bounce, on
+the wire as in `?solo`, with the HUD's bars cooling. Two things it found.
+The player spawns at the world's centre, and the centre was where the lake
+had been put, so the ranger stood in water: the lake moved up and left, a
+test now holds the centre to be grass, and the stump that the move put in
+the water moved with it. And the server stamps its cache-busting digest at
+boot, so a module rebuilt under a running server is never fetched by a
+browser that has the old one — a note for whoever looks next, not a defect.
+The console logged nothing.
+
+**Andy's look, 2026-09-10.** He played it and it works; nothing was asked
+to change. The fox and the props were generated without a style reference
+to the ranger, which shows a little in the fox's line weight, and the tools
+for it — a style image, one `reduce_colors` pass over the set — are a few
+generations and a `make art` the day it matters.
+
+**Committed in the order it was built**, one commit a step — the facing,
+the export reader, the art tool and the art, the lab, the record — after
+the overlay fix that was waiting in the same tree, and tagged `v0.3.0`.
+
+### Verification
+
+- `make check` green on the tree, 2026-09-10; `go list -deps .` the
+  standard library; `make wasm` at 278,777 bytes under the gate, and the
+  sizes in *Gates*. `make ci` green on the commit tagged `v0.3.0`, before
+  it was pushed.
+- `make art` twice, and the second run changed nothing: measured by the
+  checksum of every file under `web/static/img` before and after.
+- A headless Chrome drew both scenes — *The record* says what it saw — and
+  Andy played it on 2026-09-10: it works. The ramp's number is still to be
+  re-read; *What is left* has it.
+- Andy's eye, the same day: it works, and no style pass was asked for.
+
+## What is left
+
+Every open item, with who closes it. Nothing here is a follow-up: the
+follow-ups are under *Where it stands* and *What this does not do*, each
+gated on a number, and milestone 9 — the server that ships — waits for a
+brief of its own. The overlay fix of 2026-09-10 and milestone 8 are
+committed and tagged `v0.3.0`, so *Gates* speaks for that commit.
+
+1. **The eye's verdict on the blend.** Walk the floor at `Time.TickRate` 20
+   with `Render.Interpolate` on and off and say whether 2 px a frame at 60 Hz
+   reads as smooth — the last line of step 8 of *Verification*, after *The
+   blend, measured* took the rest. Andy, in a browser.
+2. **The tile boxes.** With `Debug.ShowHitBoxes` on, every floor tile is a
+   red square and the player's box is one of 254. Either the overlay stays
+   honest — every entity, tiles included — or `AddTilemap` marks its tiles
+   and `eachHitBox` skips them, which spends bit 15, the last spare, and
+   hides the boxes of a game whose tiles are walls. Andy's design call;
+   *Where it stands* has the look.
+3. **The client half's ceiling.** 31,736 bytes against 10,240, measured and
+   priced piece by piece in *The client is built*. Retire the ceiling or
+   shrink the client: the brief's guardrail carries the pricing's
+   recommendation, and the ruling is Andy's.
+4. **Safari and Firefox, once.** The socket under `default-src 'self'`, the
+   console, and the GPU name reading `(masked)` — step 4 of *Verification*
+   and milestone 7's list. Andy, at those browsers; a headless Chrome cannot
+   stand in for either.
+5. **The ramp, re-read.** 34,476 was measured against a build that no longer
+   exists — the fixed tick, the sheet's `srcRect`, the blend's `DrawPos` and
+   the bounce on the tick have each moved the per-frame cost since, and
+   milestone 8 changed the sprites it counts: a 44x34 fox in place of a
+   32x32 frame, and a floor of about 1,150 tiles in place of 960 — and the
+   *sort / draw* row has never been read at the ceiling, which is the number
+   that says whether a renderer swap could reach the cost at all. Six minutes
+   of `B` in a real window; a headless compositor's frame times are not
+   comparable. Andy.
 ## What this does not do
 
 - **No native build.** Real OS-level CPU, RAM and GPU numbers need a second
@@ -1861,7 +2330,7 @@ effect of this work:
   shows, the crowd at which the whole world is too many bytes — and the net
   line prints the numbers.
 - **No deployment.** Two browsers on one machine is the whole claim. The
-  server that ships, with an ops listener and a `/healthz`, is milestone 8
+  server that ships, with an ops listener and a `/healthz`, is milestone 9
   with a brief of its own.
 - **No networked `game-jam-template`.** Its rules run once a frame in the
   update given to `Run`, its action windows are indexed off animation frames,
