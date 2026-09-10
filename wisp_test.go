@@ -1456,3 +1456,137 @@ func TestMenu(t *testing.T) {
 		}
 	})
 }
+
+// TestFacing is how many ways an entity turns: the two a side-view sheet
+// draws, the four of a classic top-down one, or the eight rotations a
+// generated character comes with. The default is 2, and it has to behave
+// exactly as before, because every existing game keys its rows on that.
+func TestFacing(t *testing.T) {
+	t.Parallel()
+	const attack = uint64(1 << 20)
+	const start = wisp.StateFaceRight | wisp.StateIdle | wisp.StateVisible
+	add := func(e *wisp.Engine, state uint64) int {
+		return e.Add(wisp.Sprite{Height: 32, State: state, Width: 32, X: 100, Y: 100})
+	}
+	facing := func(s uint64) uint64 {
+		return s & (wisp.StateFaceDown | wisp.StateFaceLeft | wisp.StateFaceRight | wisp.StateFaceUp)
+	}
+
+	t.Run("at 2 a vertical move keeps the horizontal facing, and the old keys still resolve", func(t *testing.T) {
+		e := newEngine(t)
+		e.RowMask = wisp.MaskPose
+		e.RowForState = map[uint64]int{
+			wisp.StateFaceRight | wisp.StateIdle: 0,
+			wisp.StateFaceRight | wisp.StateMove: 2,
+		}
+		p := add(e, start)
+
+		e.Move(p, 0, -1)
+		e.Step(100)
+
+		if got := facing(e.State[p]); got != wisp.StateFaceRight {
+			t.Errorf("facing %b, want FaceRight alone: at 2 the vertical axis turns nothing", got)
+		}
+		if e.ImageRow[p] != 2 {
+			t.Errorf("row = %d, want 2: a two-row map's key has to resolve as it always did", e.ImageRow[p])
+		}
+	})
+
+	t.Run("at 4 a straight move faces one of four ways", func(t *testing.T) {
+		e := newEngine(t)
+		e.Facing = 4
+		p := add(e, start)
+
+		e.Move(p, 0, -1)
+		if got := facing(e.State[p]); got != wisp.StateFaceUp {
+			t.Errorf("facing %b after up, want FaceUp alone", got)
+		}
+		e.Move(p, -1, 0)
+		if got := facing(e.State[p]); got != wisp.StateFaceLeft {
+			t.Errorf("facing %b after left, want FaceLeft alone", got)
+		}
+		e.Move(p, 0, 0)
+		if got := facing(e.State[p]); got != wisp.StateFaceLeft {
+			t.Errorf("facing %b after a zero axis, want FaceLeft kept", got)
+		}
+	})
+
+	t.Run("at 4 a diagonal keeps a facing it already has, and takes the horizontal otherwise", func(t *testing.T) {
+		e := newEngine(t)
+		e.Facing = 4
+		p := add(e, wisp.StateFaceUp|wisp.StateIdle|wisp.StateVisible)
+
+		e.Move(p, 1, -1)
+		if got := facing(e.State[p]); got != wisp.StateFaceUp {
+			t.Errorf("facing %b, want FaceUp kept: up-right while facing up is a strafe", got)
+		}
+		e.Move(p, 1, 1)
+		if got := facing(e.State[p]); got != wisp.StateFaceRight {
+			t.Errorf("facing %b, want FaceRight: down-right while facing up has no axis to keep", got)
+		}
+	})
+
+	t.Run("at 8 a diagonal sets two bits and a straight move clears the other axis", func(t *testing.T) {
+		e := newEngine(t)
+		e.Facing = 8
+		e.RowMask = wisp.MaskPose
+		e.RowForState = map[uint64]int{
+			wisp.StateFaceUp | wisp.StateFaceRight | wisp.StateMove: 5,
+			wisp.StateFaceUp | wisp.StateFaceRight | wisp.StateIdle: 6,
+			wisp.StateFaceDown | wisp.StateMove:                     7,
+		}
+		p := add(e, start)
+
+		e.Move(p, 1, -1)
+		e.Step(100)
+		if got := facing(e.State[p]); got != wisp.StateFaceUp|wisp.StateFaceRight {
+			t.Errorf("facing %b, want FaceUp|FaceRight", got)
+		}
+		if e.ImageRow[p] != 5 {
+			t.Errorf("row = %d, want 5: an eight-way key resolves through MaskPose", e.ImageRow[p])
+		}
+
+		e.Move(p, 0, 0)
+		e.Step(100)
+		if e.ImageRow[p] != 6 {
+			t.Errorf("row = %d, want 6: stopping keeps the diagonal facing and goes idle", e.ImageRow[p])
+		}
+
+		e.Move(p, 0, 1)
+		e.Step(100)
+		if got := facing(e.State[p]); got != wisp.StateFaceDown {
+			t.Errorf("facing %b, want FaceDown alone: a straight move clears the other axis", got)
+		}
+		if e.ImageRow[p] != 7 {
+			t.Errorf("row = %d, want 7", e.ImageRow[p])
+		}
+	})
+
+	t.Run("an action locks the facing at any count", func(t *testing.T) {
+		e := newEngine(t)
+		e.Facing = 8
+		e.RowMask = wisp.MaskPose | attack
+		p := add(e, wisp.StateFaceRight|attack|wisp.StateVisible)
+
+		e.Move(p, -1, 1)
+
+		if got := facing(e.State[p]); got != wisp.StateFaceRight {
+			t.Errorf("facing %b turned during an action", got)
+		}
+	})
+
+	t.Run("the keys turn the target the same way", func(t *testing.T) {
+		e := newEngine(t)
+		e.Facing = 8
+		p := add(e, start)
+		e.InputTarget = p
+		e.Input.Key("w", true)
+		e.Input.Key("a", true)
+
+		e.Step(100)
+
+		if got := facing(e.State[p]); got != wisp.StateFaceUp|wisp.StateFaceLeft {
+			t.Errorf("facing %b, want FaceUp|FaceLeft", got)
+		}
+	})
+}

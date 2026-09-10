@@ -51,6 +51,9 @@
 // [StateRemote] for an entity that somebody else moves — and a game adds its
 // own above bit 15. [Engine.RowForState] maps a state to the sprite
 // sheet row that draws it, so the engine never has to know what an "attack" is.
+// [Engine.Facing] is how many ways an entity turns: 2 by default, a left row
+// and a right row, or 4 or 8, which is how the rotations of a top-down sprite
+// key that map.
 //
 // # Sheets
 //
@@ -60,8 +63,8 @@
 // long a frame lasts — and it is what a game gets by saying nothing.
 //
 // The other is what Aseprite exports: a rectangle and a duration per frame,
-// and named ranges over them. [ParseSheet] reads that export, "make sheets"
-// produces it, and the result goes in [Engine.Sheets], one per loaded image:
+// and named ranges over them. [ParseSheet] reads that export, and the result
+// goes in [Engine.Sheets], one per loaded image:
 //
 //	sheet, err := wisp.ParseSheet(exported)
 //	e.Sheets = []wisp.Sheet{sheet}

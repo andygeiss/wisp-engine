@@ -35,12 +35,19 @@ const (
 // MaskMove is the four bits that say an entity is being pushed somewhere.
 const MaskMove = StateMoveDown | StateMoveLeft | StateMoveRight | StateMoveUp
 
-// MaskPose is the four bits that make a pose: facing left, facing right, idle
-// and moving. A game usually starts its [Engine.RowMask] with it.
-const MaskPose = StateFaceLeft | StateFaceRight | StateIdle | StateMove
+// MaskPose is the six bits that make a pose: the four facings, idle and
+// moving. A game usually starts its [Engine.RowMask] with it. At the default
+// [Engine.Facing] of 2 the vertical facings are never set, so the keys of a
+// two-row sheet's map are the four bits they always were.
+const MaskPose = StateFaceDown | StateFaceLeft | StateFaceRight | StateFaceUp | StateIdle | StateMove
 
-// maskFacing is the pair the movement keys turn an entity around with.
-const maskFacing = StateFaceLeft | StateFaceRight
+// The facing bits by axis: the pair the horizontal axis turns an entity with,
+// the pair the vertical one does, and all four.
+const (
+	maskFaceX = StateFaceLeft | StateFaceRight
+	maskFaceY = StateFaceDown | StateFaceUp
+	maskFace  = maskFaceX | maskFaceY
+)
 
 // advanceAnimations moves every animated entity to its next frame when its
 // frame time is up.
@@ -101,9 +108,9 @@ func (e *Engine) advanceAnimation(i int, dt float64) {
 // positive, and only the sign counts: a value of 100 pushes exactly as hard as
 // a value of 1, so an axis that arrived from somewhere untrusted needs no
 // clamping first. It sets the move bits the next [Engine.Tick] moves the
-// entity by, and turns the entity to face the way it is going — unless an
-// action outside the pose bits, an attack or a dash, is running, so a sprite
-// does not turn mid-swing.
+// entity by, and turns the entity to face the way it is going, one of
+// [Engine.Facing] ways — unless an action outside the pose bits, an attack or
+// a dash, is running, so a sprite does not turn mid-swing.
 //
 // The engine calls it every tick for [Engine.InputTarget], with the movement
 // keys. A server calls it for every player with the axis that player sent, and
@@ -118,15 +125,9 @@ func (e *Engine) Move(i int, dx, dy float64) {
 	s &^= MaskMove
 	if dx < 0 {
 		s |= StateMoveLeft
-		if !lockFacing {
-			s = s&^maskFacing | StateFaceLeft
-		}
 	}
 	if dx > 0 {
 		s |= StateMoveRight
-		if !lockFacing {
-			s = s&^maskFacing | StateFaceRight
-		}
 	}
 	if dy < 0 {
 		s |= StateMoveUp
@@ -134,7 +135,58 @@ func (e *Engine) Move(i int, dx, dy float64) {
 	if dy > 0 {
 		s |= StateMoveDown
 	}
+	if !lockFacing {
+		s = e.face(s, dx, dy)
+	}
 	e.State[i] = s
+}
+
+// face turns state s the way an axis points, one of [Engine.Facing] ways.
+//
+// At 2 only the horizontal axis turns the entity, so a sprite walking straight
+// up keeps looking the way it last walked sideways — which is what every sheet
+// with a left row and a right row was drawn for. At 8 the facing is the
+// direction of travel: a diagonal sets a bit from each axis and a straight
+// move clears the other axis's bit. At 4 a straight move sets one of the four,
+// and a diagonal keeps the facing when it is one of the two axes pressed, so
+// a sprite strafes rather than flickers, and takes the horizontal one
+// otherwise. A zero axis turns nothing, whatever the count.
+func (e *Engine) face(s uint64, dx, dy float64) uint64 {
+	var fx, fy uint64
+	switch {
+	case dx < 0:
+		fx = StateFaceLeft
+	case dx > 0:
+		fx = StateFaceRight
+	}
+	switch {
+	case dy < 0:
+		fy = StateFaceUp
+	case dy > 0:
+		fy = StateFaceDown
+	}
+	switch e.Facing {
+	case 8:
+		if fx|fy == 0 {
+			return s
+		}
+		return s&^maskFace | fx | fy
+	case 4:
+		switch {
+		case fx != 0 && fy != 0 && s&(fx|fy) != 0:
+			return s
+		case fx != 0:
+			return s&^maskFace | fx
+		case fy != 0:
+			return s&^maskFace | fy
+		}
+		return s
+	default:
+		if fx == 0 {
+			return s
+		}
+		return s&^maskFaceX | fx
+	}
 }
 
 // overlapsView reports whether entity i's sprite touches the given rectangle.

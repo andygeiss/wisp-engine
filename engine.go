@@ -87,6 +87,14 @@ type Engine struct {
 	// Z is the draw layer. Lower draws first.
 	Z []int
 
+	// Facing is how many ways [Engine.Move] turns an entity: 2, 4 or 8, and 0
+	// means 2. At 2 only the horizontal axis turns it, which is what a sheet
+	// with a left row and a right row wants, and what every game had until
+	// now. At 4 a move sets one of the four facing bits; at 8 a diagonal sets
+	// two, one from each axis, so the eight rotations of a top-down sprite
+	// key a RowForState map through [MaskPose]. Both halves of a networked
+	// game set the same value, because the server is what turns a player.
+	Facing int
 	// RowForState maps a state, masked by RowMask, to the sheet row that draws
 	// it. A game fills it once; the engine only looks things up, so it never
 	// has to know what an "attack" is.
