@@ -60,11 +60,10 @@ var (
 // ParseSheet reads an Aseprite sprite sheet export and returns the [Sheet] it
 // describes.
 //
-// Produce the input with Aseprite's own exporter, which is what "make sheets"
-// runs:
+// Produce the input with Aseprite's own exporter:
 //
-//	aseprite -b assets/lab.aseprite --sheet lab.png --sheet-type rows \
-//	  --data lab.json --format json-array --list-tags
+//	aseprite -b hero.aseprite --sheet hero.png --sheet-type rows \
+//	  --data hero.json --format json-array --list-tags
 //
 // The format must be json-array and the tags must be listed; without
 // --list-tags an export carries no animations and every frame is one nameless

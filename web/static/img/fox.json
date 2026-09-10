@@ -1,0 +1,114 @@
+{
+  "character": {
+    "directions": 8,
+    "id": "43ae5597-4cc9-4556-9f57-8dcefb8139ee",
+    "name": "Idle",
+    "prompt": "small orange fox with a white-tipped bushy tail and black paws",
+    "size": {
+      "height": 48,
+      "width": 48
+    },
+    "view": "high top-down"
+  },
+  "crop": {
+    "x": 1,
+    "y": 7,
+    "width": 44,
+    "height": 34
+  },
+  "export_version": "1.0",
+  "spritesheet": {
+    "cell_size": {
+      "width": 44,
+      "height": 34
+    },
+    "columns": 8,
+    "path": "fox.png",
+    "pivot": "cell-center",
+    "rows": [
+      {
+        "directions": [
+          "south",
+          "south-east",
+          "east",
+          "north-east",
+          "north",
+          "north-west",
+          "west",
+          "south-west"
+        ],
+        "frame_count": 8,
+        "row": 0,
+        "type": "rotations"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "south",
+        "frame_count": 8,
+        "row": 1,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "south-east",
+        "frame_count": 8,
+        "row": 2,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "east",
+        "frame_count": 8,
+        "row": 3,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "north-east",
+        "frame_count": 8,
+        "row": 4,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "north",
+        "frame_count": 8,
+        "row": 5,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "north-west",
+        "frame_count": 8,
+        "row": 6,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "west",
+        "frame_count": 8,
+        "row": 7,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "7dce0136-d648-40ba-ab9c-bf27eabd8b10",
+        "direction": "south-west",
+        "frame_count": 8,
+        "row": 8,
+        "type": "animation"
+      }
+    ],
+    "sheet_size": {
+      "width": 352,
+      "height": 306
+    }
+  }
+}

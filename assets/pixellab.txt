@@ -1,0 +1,16 @@
+# The lab's art, by PixelLab ID. "make art" turns every line into the files
+# the engine serves under web/static/img: <name>.png, and for a character or
+# a tileset <name>.json beside it. A line is a kind, the ID and the name.
+#
+# The characters were generated on 2026-09-10 — the ranger in v3 mode at
+# 48 px, the fox in standard mode as a quadruped — and animated with the
+# templates the account offers. Each tileset is 32 px, high top-down,
+# lineless; the path is chained on the meadow's grass so the two match.
+character cf6befda-4679-47e6-be04-e53d8312261c hero
+character 43ae5597-4cc9-4556-9f57-8dcefb8139ee fox
+tileset   bad1d682-3c0c-4527-94a1-885e18e3999d meadow
+tileset   aa76cf12-fc14-4f76-aea7-3b2137a67303 path
+object    f3358417-490c-48f0-bfa6-7a0a417e180c tree
+object    72ca919e-f6ef-489e-823e-901fd5bda041 boulder
+object    ceb1ab49-9564-4fdc-b395-fd857beb39df bush
+object    8019e76b-34de-4aac-ad39-0e77aa9c5f9b stump

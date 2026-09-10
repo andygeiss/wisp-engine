@@ -1,0 +1,242 @@
+{
+  "character": {
+    "directions": 8,
+    "id": "cf6befda-4679-47e6-be04-e53d8312261c",
+    "name": "Idle",
+    "prompt": "young ranger in a dark green hooded cloak, brown leather boots and gloves, holding a short sword in the right hand",
+    "size": {
+      "height": 48,
+      "width": 48
+    },
+    "view": "high top-down"
+  },
+  "crop": {
+    "x": 7,
+    "y": 11,
+    "width": 52,
+    "height": 48
+  },
+  "export_version": "1.0",
+  "spritesheet": {
+    "cell_size": {
+      "width": 52,
+      "height": 48
+    },
+    "columns": 8,
+    "path": "hero.png",
+    "pivot": "cell-center",
+    "rows": [
+      {
+        "directions": [
+          "south",
+          "south-east",
+          "east",
+          "north-east",
+          "north",
+          "north-west",
+          "west",
+          "south-west"
+        ],
+        "frame_count": 8,
+        "row": 0,
+        "type": "rotations"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "south",
+        "frame_count": 4,
+        "row": 1,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "south-east",
+        "frame_count": 4,
+        "row": 2,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "east",
+        "frame_count": 4,
+        "row": 3,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "north-east",
+        "frame_count": 4,
+        "row": 4,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "north",
+        "frame_count": 4,
+        "row": 5,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "north-west",
+        "frame_count": 4,
+        "row": 6,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "west",
+        "frame_count": 4,
+        "row": 7,
+        "type": "animation"
+      },
+      {
+        "animation": "idle",
+        "animation_group_id": "a4a75f16-78a0-4a6a-b6e2-4a2791fe8abc",
+        "direction": "south-west",
+        "frame_count": 4,
+        "row": 8,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "south",
+        "frame_count": 8,
+        "row": 9,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "south-east",
+        "frame_count": 8,
+        "row": 10,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "east",
+        "frame_count": 8,
+        "row": 11,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "north-east",
+        "frame_count": 8,
+        "row": 12,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "north",
+        "frame_count": 8,
+        "row": 13,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "north-west",
+        "frame_count": 8,
+        "row": 14,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "west",
+        "frame_count": 8,
+        "row": 15,
+        "type": "animation"
+      },
+      {
+        "animation": "strike",
+        "animation_group_id": "67629734-190c-4f2d-83f4-0db5890688c5",
+        "direction": "south-west",
+        "frame_count": 8,
+        "row": 16,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "south",
+        "frame_count": 8,
+        "row": 17,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "south-east",
+        "frame_count": 8,
+        "row": 18,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "east",
+        "frame_count": 8,
+        "row": 19,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "north-east",
+        "frame_count": 8,
+        "row": 20,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "north",
+        "frame_count": 8,
+        "row": 21,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "north-west",
+        "frame_count": 8,
+        "row": 22,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "west",
+        "frame_count": 8,
+        "row": 23,
+        "type": "animation"
+      },
+      {
+        "animation": "walk",
+        "animation_group_id": "c9e6b0fc-f5da-4011-bc45-880823dbe469",
+        "direction": "south-west",
+        "frame_count": 8,
+        "row": 24,
+        "type": "animation"
+      }
+    ],
+    "sheet_size": {
+      "width": 416,
+      "height": 1200
+    }
+  }
+}
