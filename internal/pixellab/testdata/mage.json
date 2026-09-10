@@ -1,0 +1,53 @@
+{
+  "character": {
+    "id": "a2b56d65-82d8-4ad0-94b1-d2e617a9e6e8",
+    "name": "little mage, with a fireball",
+    "prompt": "little mage, with a fireball",
+    "size": {
+      "width": 40,
+      "height": 40
+    },
+    "directions": 8,
+    "view": "high top-down"
+  },
+  "spritesheet": {
+    "path": "little_mage_with_a_fireball.png",
+    "cell_size": {
+      "width": 40,
+      "height": 40
+    },
+    "sheet_size": {
+      "width": 320,
+      "height": 80
+    },
+    "columns": 8,
+    "pivot": "cell-center",
+    "rows": [
+      {
+        "row": 0,
+        "type": "rotations",
+        "frame_count": 8,
+        "directions": [
+          "south",
+          "south-east",
+          "east",
+          "north-east",
+          "north",
+          "north-west",
+          "west",
+          "south-west"
+        ]
+      },
+      {
+        "row": 1,
+        "type": "animation",
+        "frame_count": 6,
+        "animation": "Fireball",
+        "animation_group_id": "bd09c419-6bce-43c8-adfa-c7801a6d983a",
+        "direction": "south-west"
+      }
+    ]
+  },
+  "export_version": "1.0",
+  "export_date": "2026-09-10T07:48:16.504456+00:00"
+}
