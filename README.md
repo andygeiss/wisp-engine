@@ -1,5 +1,11 @@
 # Wisp Engine
 
+> **Archived 2026-09-11.** The engine moved into
+> [`github.com/andygeiss/game`](https://github.com/andygeiss/game) with its
+> history, as `internal/wisp`, and lives on there: a fix is made in that
+> tree and its lab is run after it. Nothing here changes again;
+> `go get github.com/andygeiss/wisp-engine` keeps resolving to v0.3.1.
+
 A 2D pixel-art engine for games that TinyGo compiles to WebAssembly. It is for
 one person building one game: entities in a structure of arrays, a Canvas2D
 renderer, keyboard and mouse, a camera, and no dependencies at all.
